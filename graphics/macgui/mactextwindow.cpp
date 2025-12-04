@@ -346,7 +346,7 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 			default:
 				return false;
 			}
-
+			setScroll(0, 0);
 			return true;
 		}
 
