@@ -19,13 +19,13 @@
  *
  */
 
-#include "common/timer.h"
 #include "common/system.h"
+#include "common/timer.h"
 
-#include "graphics/macgui/macwindowmanager.h"
 #include "graphics/macgui/macfontmanager.h"
-#include "graphics/macgui/mactextwindow.h"
 #include "graphics/macgui/macmenu.h"
+#include "graphics/macgui/mactextwindow.h"
+#include "graphics/macgui/macwindowmanager.h"
 
 namespace Graphics {
 
@@ -38,8 +38,7 @@ enum {
 	kConScrollStep = 12,
 };
 
-MacTextWindow::MacTextWindow(MacWindowManager *wm, const MacFont *font, int fgcolor, int bgcolor, int maxWidth, TextAlign textAlignment, MacMenu *menu, int padding) :
-		MacWindow(wm->getLastId(), true, true, true, wm), _bgcolor(bgcolor), _maxWidth(maxWidth), _menu(menu) {
+MacTextWindow::MacTextWindow(MacWindowManager *wm, const MacFont *font, int fgcolor, int bgcolor, int maxWidth, TextAlign textAlignment, MacMenu *menu, int padding) : MacWindow(wm->getLastId(), true, true, true, wm), _bgcolor(bgcolor), _maxWidth(maxWidth), _menu(menu) {
 
 	_font = font;
 	_mactext = new MacText(this, 0, 0, 0, 0, _wm, Common::U32String(""), font, fgcolor, bgcolor, maxWidth, textAlignment, 0, padding);
@@ -49,8 +48,7 @@ MacTextWindow::MacTextWindow(MacWindowManager *wm, const MacFont *font, int fgco
 	init();
 }
 
-MacTextWindow::MacTextWindow(MacWindowManager *wm, const Font *font, int fgcolor, int bgcolor, int maxWidth, TextAlign textAlignment, MacMenu *menu, int padding) :
-		MacWindow(wm->getLastId(), true, true, true, wm), _bgcolor(bgcolor), _maxWidth(maxWidth), _menu(menu) {
+MacTextWindow::MacTextWindow(MacWindowManager *wm, const Font *font, int fgcolor, int bgcolor, int maxWidth, TextAlign textAlignment, MacMenu *menu, int padding) : MacWindow(wm->getLastId(), true, true, true, wm), _bgcolor(bgcolor), _maxWidth(maxWidth), _menu(menu) {
 
 	_font = nullptr;
 	_mactext = new MacText(Common::U32String(""), _wm, font, fgcolor, bgcolor, maxWidth, textAlignment, 0, padding);
@@ -69,6 +67,10 @@ void MacTextWindow::init() {
 	_selectable = true;
 
 	_textColorRGB = 0;
+
+	_scrollDirection = kBorderNone;
+	_nextScrollTime = 0;
+	_scrollDelay = 50;
 
 	// Disable autoselect on activation
 	_mactext->setAutoSelect(false);
@@ -120,7 +122,7 @@ void MacTextWindow::appendText(const Common::U32String &str, const MacFont *macF
 	}
 
 	_contentIsDirty = true;
-	_inputIsDirty = true;	//force it to redraw input
+	_inputIsDirty = true; // force it to redraw input
 
 	if (_editable) {
 		_mactext->_scrollPos = MAX<int>(0, _mactext->getTextHeight() - getInnerDimensions().height());
@@ -183,6 +185,20 @@ const MacFont *MacTextWindow::getTextWindowFont() {
 }
 
 bool MacTextWindow::draw(bool forceRedraw) {
+
+	if (_scrollDirection != kBorderNone) {
+		uint32 now = g_system->getMillis();
+		if (now >= _nextScrollTime) {
+			if (_scrollDirection == kBorderScrollUp) {
+				_mactext->scroll(-1);
+			} else if (_scrollDirection == kBorderScrollDown) {
+				_mactext->scroll(1);
+			}
+			calcScrollBar();
+			_nextScrollTime = now + _scrollDelay;
+		}
+	}
+
 	if (!_borderIsDirty && !_contentIsDirty && !_mactext->needsRedraw() && !_inputIsDirty && !forceRedraw)
 		return false;
 
@@ -291,7 +307,7 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 		case Common::KEYCODE_RETURN:
 			undrawInput();
 			_inputIsDirty = true; // we force it to redraw input
-			return false; // Pass it to the higher level for processing
+			return false;         // Pass it to the higher level for processing
 
 		default:
 			if (event.kbd.ascii == '~')
@@ -310,18 +326,18 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 		}
 	}
 
-	if (hasAllFocus())	// We are being dragged or resized
-		return MacWindow::processEvent(event);	// Pass it to upstream
+	if (hasAllFocus())                         // We are being dragged or resized
+		return MacWindow::processEvent(event); // Pass it to upstream
 
 	if (event.type == Common::EVENT_WHEELUP) {
-		//setHighlight(kBorderScrollUp);
+		// setHighlight(kBorderScrollUp);
 		_mactext->scroll(-2);
 		calcScrollBar();
 		return true;
 	}
 
 	if (event.type == Common::EVENT_WHEELDOWN) {
-		//setHighlight(kBorderScrollDown);
+		// setHighlight(kBorderScrollDown);
 		_mactext->scroll(2);
 		calcScrollBar();
 		return true;
@@ -330,22 +346,14 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 	if (click == kBorderScrollUp || click == kBorderScrollDown) {
 		if (event.type == Common::EVENT_LBUTTONDOWN) {
 			setHighlight(click);
-			_mactext->scroll(0);
+			_scrollDirection = click;
 			calcScrollBar();
 			return true;
 		} else if (event.type == Common::EVENT_LBUTTONUP) {
-			switch (click) {
-			case kBorderScrollUp:
-				setHighlight(kBorderNone);
-				_mactext->scroll(-1);
-				break;
-			case kBorderScrollDown:
-				setHighlight(kBorderNone);
-				_mactext->scroll(1);
-				break;
-			default:
-				return false;
-			}
+			// reset scrolling state
+			_scrollDirection = kBorderNone;
+			setHighlight(kBorderNone);
+			// hide the scroll bar
 			setScroll(0, 0);
 			return true;
 		}

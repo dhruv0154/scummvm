@@ -50,8 +50,15 @@ public:
 	void clearText();
 	void setMarkdownText(const Common::U32String &str);
 
-	void setEditable(bool editable) { _editable = editable; _mactext->setEditable(editable); }
-	void setActive(bool active) override { MacWindow::setActive(active); if (_editable) _mactext->setActive(active); }
+	void setEditable(bool editable) {
+		_editable = editable;
+		_mactext->setEditable(editable);
+	}
+	void setActive(bool active) override {
+		MacWindow::setActive(active);
+		if (_editable)
+			_mactext->setActive(active);
+	}
 	void setSelectable(bool selectable) { _selectable = selectable; }
 
 	const Common::U32String &getInput() { return _inputText; }
@@ -93,7 +100,7 @@ public:
 	 * if we want to draw the text which color is not black, then we need to set _textColorRGB
 	 * @param rgb text color you want to draw
 	 */
-	void setTextColorRGB (uint32 rgb) { _textColorRGB = rgb; }
+	void setTextColorRGB(uint32 rgb) { _textColorRGB = rgb; }
 
 private:
 	void init();
@@ -117,6 +124,10 @@ private:
 	Common::U32String _inputText;
 	uint _inputTextHeight;
 	bool _inputIsDirty;
+
+	WindowClick _scrollDirection;
+	float _nextScrollTime;
+	float _scrollDelay;
 
 	MacMenu *_menu;
 
