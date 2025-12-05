@@ -505,7 +505,7 @@ WindowClick MacWindow::isInScroll(int x, int y) const {
 	}
 
 	if (x >= _innerDims.right && x < _innerDims.right + bRight) {
-		if (y < _innerDims.top - bTop)
+		if (y < _innerDims.top)
 			return kBorderBorder;
 
 		if (y >= _innerDims.bottom + bBottom)
