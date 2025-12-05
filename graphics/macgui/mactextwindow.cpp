@@ -71,6 +71,7 @@ void MacTextWindow::init() {
 	_scrollDirection = kBorderNone;
 	_clickedScrollPart = kBorderNone;
 	_nextScrollTime = 0;
+	_nextWheelEventTime = 0;
 	_scrollDelay = 50;
 
 	// Disable autoselect on activation
@@ -187,8 +188,16 @@ const MacFont *MacTextWindow::getTextWindowFont() {
 
 bool MacTextWindow::draw(bool forceRedraw) {
 
+	uint32 now = g_system->getMillis();
+
+	if (_nextWheelEventTime != 0 && now >= _nextWheelEventTime) {
+		if (_scrollDirection == kBorderNone && _clickedScrollPart == kBorderNone) {
+			setScroll(0, 0);         // hide the scrollbar
+			_nextWheelEventTime = 0; // reset timer
+		}
+	}
+
 	if (_scrollDirection != kBorderNone) {
-		uint32 now = g_system->getMillis();
 		if (now >= _nextScrollTime) {
 			if (_scrollDirection == kBorderScrollUp) {
 				_mactext->scroll(-1);
@@ -356,6 +365,8 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 		// setHighlight(kBorderScrollUp);
 		_mactext->scroll(-2);
 		calcScrollBar();
+
+		_nextWheelEventTime = g_system->getMillis() + 300; // hide the bar after 300ms from now
 		return true;
 	}
 
@@ -363,6 +374,8 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 		// setHighlight(kBorderScrollDown);
 		_mactext->scroll(2);
 		calcScrollBar();
+
+		_nextWheelEventTime = g_system->getMillis() + 300; // hide the bar after 300ms from now
 		return true;
 	}
 
