@@ -189,7 +189,7 @@ const MacFont *MacTextWindow::getTextWindowFont() {
 bool MacTextWindow::draw(bool forceRedraw) {
 
 	uint32 now = g_system->getMillis();
-
+	// check if we need to hide the scroll bar
 	if (_nextWheelEventTime != 0 && now >= _nextWheelEventTime) {
 		if (_scrollDirection == kBorderNone && _clickedScrollPart == kBorderNone) {
 			setScroll(0, 0);         // hide the scrollbar
@@ -197,6 +197,7 @@ bool MacTextWindow::draw(bool forceRedraw) {
 		}
 	}
 
+	// handle mouse button scrolling
 	if (_scrollDirection != kBorderNone) {
 		if (now >= _nextScrollTime) {
 			if (_scrollDirection == kBorderScrollUp) {
@@ -209,28 +210,33 @@ bool MacTextWindow::draw(bool forceRedraw) {
 		}
 	}
 
-	if (!_borderIsDirty && !_contentIsDirty && !_mactext->needsRedraw() && !_inputIsDirty && !forceRedraw)
+	bool needsContentRedraw = _contentIsDirty || _inputIsDirty || _mactext->needsRedraw() || forceRedraw;
+
+	if (!_borderIsDirty && !needsContentRedraw) {
 		return false;
+	}
 
 	if (_borderIsDirty || forceRedraw) {
 		drawBorder();
-
-		if (_wm->_mode & kWMModeWin95) {
-			_composeSurface->clear(_bgcolor);
-		} else {
-			_composeSurface->clear(_wm->_colorWhite);
-		}
 	}
 
 	if (_inputIsDirty || forceRedraw) {
 		drawInput();
 		_inputIsDirty = false;
+		needsContentRedraw = true; // input update needs a redraw
 	}
 
-	_contentIsDirty = false;
+	if (needsContentRedraw) {
+		// only clear the surface if we are actually going to redraw the text
+		if (_wm->_mode & kWMModeWin95) {
+			_composeSurface->clear(_bgcolor);
+		} else {
+			_composeSurface->clear(_wm->_colorWhite);
+		}
 
-	// Compose
-	_mactext->draw(_composeSurface, _inputIsDirty || forceRedraw);
+		_contentIsDirty = false;
+		_mactext->draw(_composeSurface, forceRedraw);
+	}
 
 	return true;
 }
