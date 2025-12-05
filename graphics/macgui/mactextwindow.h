@@ -126,6 +126,7 @@ private:
 	bool _inputIsDirty;
 
 	WindowClick _scrollDirection;
+	WindowClick _clickedScrollPart;
 	float _nextScrollTime;
 	float _scrollDelay;
 
