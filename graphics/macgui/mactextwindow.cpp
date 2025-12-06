@@ -52,7 +52,7 @@ MacTextWindow::MacTextWindow(MacWindowManager *wm, const Font *font, int fgcolor
 
 	_font = nullptr;
 	_mactext = new MacText(Common::U32String(""), _wm, font, fgcolor, bgcolor, maxWidth, textAlignment, 0, padding);
-
+	_mactext = new MacText(Common::U32String(""), _wm, font, fgcolor, bgcolor, maxWidth, textAlignment, 0, true);
 	_fontRef = font;
 
 	init();
@@ -94,7 +94,7 @@ void MacTextWindow::resize(int w, int h) {
 	MacWindow::resize(w, h);
 
 	_maxWidth = getInnerDimensions().width();
-	_mactext->resize(_maxWidth, h);
+	_mactext->resize(_maxWidth, getInnerDimensions().height());
 }
 
 void MacTextWindow::setDimensions(const Common::Rect &r) {
@@ -190,10 +190,12 @@ bool MacTextWindow::draw(bool forceRedraw) {
 
 	uint32 now = g_system->getMillis();
 	// check if we need to hide the scroll bar
-	if (_nextWheelEventTime != 0 && now >= _nextWheelEventTime) {
-		if (_scrollDirection == kBorderNone && _clickedScrollPart == kBorderNone) {
-			setScroll(0, 0);         // hide the scrollbar
-			_nextWheelEventTime = 0; // reset timer
+	if (!(_wm->_mode & kWMModeWin95)) {
+		if (_nextWheelEventTime != 0 && now >= _nextWheelEventTime) {
+			if (_scrollDirection == kBorderNone && _clickedScrollPart == kBorderNone) {
+				setScroll(0, 0);         // hide the scrollbar
+				_nextWheelEventTime = 0; // reset timer
+			}
 		}
 	}
 
@@ -278,7 +280,10 @@ void MacTextWindow::calcScrollBar() {
 
 	displayHeight = getInnerDimensions().height();
 
-	maxScrollbar = getDimensions().height() - getBorderOffsets().upperScrollHeight - getBorderOffsets().lowerScrollHeight + 7;
+	maxScrollbar = getDimensions().height() - getBorderOffsets().upperScrollHeight - getBorderOffsets().lowerScrollHeight;
+	if (!(_wm->_mode & kWMModeWin95)) {
+		maxScrollbar += 6; // if not in win95 mode we need some more pixels to cover the bottom arrow in mac interface.
+	}
 
 	// if we enable the win95 mode but the text height is smaller than window height, then we don't draw the scrollbar
 	if (_wm->_mode & kWMModeWin95 && displayHeight > _mactext->getTextHeight() && !_editable)
@@ -298,24 +303,26 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 	WindowClick click = isInBorder(event.mouse.x, event.mouse.y);
 
 	if (event.type == Common::EVENT_MOUSEMOVE) {
-		if (_clickedScrollPart == kBorderScrollUp || _clickedScrollPart == kBorderScrollDown) {
-			if (click == _clickedScrollPart) {
-				// we are on the bar, so keep scrolling 
-				if (_scrollDirection != _clickedScrollPart) {
-					_scrollDirection = _clickedScrollPart;
-					setHighlight(_clickedScrollPart);
-					calcScrollBar();
+		if (!(_wm->_mode & kWMModeWin95)) {
+			if (_clickedScrollPart == kBorderScrollUp || _clickedScrollPart == kBorderScrollDown) {
+				if (click == _clickedScrollPart) {
+					// we are on the bar, so keep scrolling
+					if (_scrollDirection != _clickedScrollPart) {
+						_scrollDirection = _clickedScrollPart;
+						setHighlight(_clickedScrollPart);
+						calcScrollBar();
+					}
+				} else {
+					// we moved away from the bar, pause scrolling
+					if (_scrollDirection != kBorderNone) {
+						_scrollDirection = kBorderNone;
+						setHighlight(kBorderNone);
+						calcScrollBar();
+						setScroll(0, 0);
+					}
 				}
-			} else {
-				// we moved away from the bar, pause scrolling
-				if (_scrollDirection != kBorderNone) {
-					_scrollDirection = kBorderNone;
-					setHighlight(kBorderNone);
-					calcScrollBar();
-					setScroll(0, 0);
-				}
+				return true;
 			}
-			return true;
 		}
 	}
 
@@ -370,6 +377,7 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 	if (event.type == Common::EVENT_WHEELUP) {
 		// setHighlight(kBorderScrollUp);
 		_mactext->scroll(-2);
+		_contentIsDirty = true;
 		calcScrollBar();
 
 		_nextWheelEventTime = g_system->getMillis() + 300; // hide the bar after 300ms from now
@@ -379,6 +387,7 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 	if (event.type == Common::EVENT_WHEELDOWN) {
 		// setHighlight(kBorderScrollDown);
 		_mactext->scroll(2);
+		_contentIsDirty = true;
 		calcScrollBar();
 
 		_nextWheelEventTime = g_system->getMillis() + 300; // hide the bar after 300ms from now
@@ -398,7 +407,9 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 			_clickedScrollPart = kBorderNone;
 			setHighlight(kBorderNone);
 			// hide the scroll bar
-			setScroll(0, 0);
+			if (!(_wm->_mode & kWMModeWin95)) {
+				setScroll(0, 0);
+			}
 			return true;
 		}
 
@@ -409,7 +420,9 @@ bool MacTextWindow::processEvent(Common::Event &event) {
 		_scrollDirection = kBorderNone;
 		_clickedScrollPart = kBorderNone;
 		setHighlight(kBorderNone);
-		setScroll(0, 0);
+		if (!(_wm->_mode & kWMModeWin95)) {
+			setScroll(0, 0);
+		}
 		return true;
 	}
 
