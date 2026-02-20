@@ -327,6 +327,9 @@ void DrillerEngine::loadAssetsDOSDemo() {
 	_areaMap[2]->_name = "LAPIS LAZULI";
 	_areaMap[3]->_name = "EMERALD";
 	_areaMap[8]->_name = "TOPAZ";
+
+	uint16 demoOffset = 0x5935;
+	loadDemoData(&file, demoOffset, file.size() - demoOffset);
 	file.close();
 
 	_indicators.push_back(loadBundledImage("driller_tank_indicator"));
@@ -334,6 +337,7 @@ void DrillerEngine::loadAssetsDOSDemo() {
 
 	_indicators[0]->convertToInPlace(_gfx->_texturePixelFormat);
 	_indicators[1]->convertToInPlace(_gfx->_texturePixelFormat);
+	runDemoTrace();
 }
 
 void DrillerEngine::drawDOSUI(Graphics::Surface *surface) {

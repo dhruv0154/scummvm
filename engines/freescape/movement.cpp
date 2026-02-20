@@ -404,7 +404,7 @@ void FreescapeEngine::updatePlayerMovementClassic(float deltaTime) {
 		stepRight = _cameraRight * (float(_playerSteps[_playerStepIndex]) / 2 / _cameraRight.length());
 
 		stepFront.x() = floor(stepFront.x()) + 0.5;
-		stepFront.z() = floor(stepFront.z()) + 0.5;
+		stepFront.z() = floor(stepFront.z()) + 0.35;
 	} else {
 		stepFront = _cameraFront * (float(_playerSteps[_playerStepIndex]) / _cameraFront.length());
 		stepRight = _cameraRight * (float(_playerSteps[_playerStepIndex]) / _cameraRight.length());

@@ -1062,4 +1062,133 @@ Common::Error DrillerEngine::loadGameStreamExtended(Common::SeekableReadStream *
 	return Common::kNoError;
 }
 
+void DrillerEngine::runDemoTrace() {
+	Common::File file;
+	if (!file.open("D2")) {
+		warning("ERROR: Could not open 'D2'");
+		return;
+	}
+	uint16 demoOffset = 0x5935;
+
+	if (demoOffset >= file.size()) {
+		warning("ERROR: Offset out of bounds!");
+		return;
+	}
+	file.seek(demoOffset);
+
+	int dataSize = file.size() - demoOffset;
+	byte *data = new byte[dataSize];
+	file.read(data, dataSize);
+	file.close();
+
+	int cursor = 0;
+	int stepCount = 0;
+
+	while (cursor < dataSize) {
+		byte commandByte = data[cursor++];
+
+		if (commandByte == 0x00) {
+			warning("Step %04d | End of Demo Reached", stepCount);
+			break;
+		}
+
+		int repetition = 1;
+		byte actionCode = commandByte;
+
+		if (commandByte & 0x80) {
+			repetition = (commandByte & 0x7F) + 1;
+			if (repetition == 1)
+				repetition = 255;
+
+			if (cursor < dataSize) {
+				actionCode = data[cursor++];
+			} else {
+				break;
+			}
+		}
+
+		Common::String actionName = "Unknown";
+		switch (actionCode) {
+		case 0x01:
+			actionName = "Raise";
+			break;
+		case 0x02:
+			actionName = "Fall";
+			break;
+		case 0x03:
+			actionName = "Move Forward";
+			break;
+		case 0x04:
+			actionName = "Move Backward";
+			break;
+		case 0x05:
+			actionName = "Rotate Left";
+			break;
+		case 0x06:
+			actionName = "Rotate Right";
+			break;
+		case 0x07:
+			actionName = "Look Up";
+			break;
+		case 0x08:
+			actionName = "Look Down";
+			break;
+		case 0x16:
+			actionName = "Fire Laser";
+			break;
+		case 0x1E:
+			actionName = "Toggle Mode";
+			break;
+		case 0x09:
+			actionName = "Roll Left";
+			break;
+		case 0x0A:
+			actionName = "Roll Right";
+			break;
+		case 0x0B:
+			actionName = "Inc Angle";
+			break;
+		case 0x0C:
+			actionName = "Dec Angle";
+			break;
+		case 0x0D:
+			actionName = "U-Turn";
+			break;
+		case 0x11:
+			actionName = "Step Size +";
+			break;
+		case 0x12:
+			actionName = "Step Size -";
+			break;
+		case 0x17:
+			actionName = "Cursor Right";
+			break;
+		case 0x18:
+			actionName = "Cursor Left";
+			break;
+		case 0x19:
+			actionName = "Cursor Down";
+			break;
+		case 0x1A:
+			actionName = "Cursor Up";
+			break;
+		case 0x28:
+			actionName = "Deploy Drill";
+			break;
+		case 0x29:
+			actionName = "Info Screen";
+			break;
+		case 0x7F:
+			actionName = "NOP";
+			break;
+		default:
+			actionName = Common::String::format("Cmd 0x%02X", actionCode);
+			break;
+		}
+
+		warning("Step %04d | Reps: %3d | Action: %s", stepCount++, repetition, actionName.c_str());
+	}
+
+	delete[] data;
+}
 } // End of namespace Freescape

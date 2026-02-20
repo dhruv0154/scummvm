@@ -43,11 +43,9 @@ void FreescapeEngine::generateDemoInput() {
 
 		if (_currentDemoInputCode >= 0x16 && _currentDemoInputCode <= 0x1a) {
 			event = decodeDOSMouseEvent(_currentDemoInputCode, _currentDemoInputRepetition);
-
-			Common::Point resolution = _gfx->nativeResolution();
+			/*Common::Point resolution = _gfx->nativeResolution();
 			event.mouse.x = resolution.x * event.mouse.x / _screenW;
-			event.mouse.y = resolution.y * event.mouse.y / _screenH ;
-
+			event.mouse.y = resolution.y * event.mouse.y / _screenH ;*/
 			_demoEvents.push_back(event);
 			g_system->delayMillis(10);
 			_currentDemoInputRepetition = 0;
@@ -58,11 +56,10 @@ void FreescapeEngine::generateDemoInput() {
 			_forceEndGame = true;
 		} else {
 			event = Common::Event();
-			event.type = Common::EVENT_KEYDOWN;
-			event.kbd.keycode = (Common::KeyCode)decodeDOSKey(_currentDemoInputCode);
-			event.customType = 0xde00;
+			event.type = Common::EVENT_CUSTOM_ENGINE_ACTION_START;
+			event.customType = decodeDOSKey(_currentDemoInputCode);
 			_demoEvents.push_back(event);
-			debugC(1, kFreescapeDebugMove, "Pushing key: %x with repetition %d", event.kbd.keycode, _currentDemoInputRepetition);
+			debugC(1, kFreescapeDebugMove, "Pushing key: %x with repetition %d", event.customType, _currentDemoInputRepetition);
 			g_system->delayMillis(100);
 			_currentDemoInputRepetition--;
 		}
@@ -179,28 +176,45 @@ int FreescapeEngine::decodeAmigaAtariKey(int index) {
 
 int FreescapeEngine::decodeDOSKey(int index) {
 	switch (index) {
-	case 1:
-		return Common::KEYCODE_r;
-	case 2:
-		return Common::KEYCODE_f;
-	case 3:
-		return Common::KEYCODE_UP;
-	case 4:
-		return Common::KEYCODE_DOWN;
-	case 5:
-		return Common::KEYCODE_q;
-	case 6:
-		return Common::KEYCODE_w;
-	case 7:
-		return Common::KEYCODE_p;
-	case 8:
-		return Common::KEYCODE_l;
-	case 11:
-		return Common::KEYCODE_a;
-	case 30:
-		return Common::KEYCODE_SPACE;
-	case 40:
-		return Common::KEYCODE_d;
+	case 0x01:
+		return kActionRiseOrFlyUp;
+	case 0x02:
+		return kActionLowerOrFlyDown;
+	case 0x03:
+		return kActionMoveUp;
+	case 0x04:
+		return kActionMoveDown;
+	case 0x05:
+		return kActionRotateLeft;
+	case 0x06:
+		return kActionRotateRight;
+	case 0x07:
+		return kActionRotateUp;
+	case 0x08:
+		return kActionRotateDown;
+	case 0x09:
+		return kActionRollLeft;
+	case 0x0A:
+		return kActionRollRight;
+	case 0x0D:
+		return kActionTurnBack;
+	case 0x0B:
+		return kActionIncreaseAngle;
+	case 0x0C:
+		return kActionDecreaseAngle;
+	case 0x11:
+		return kActionIncreaseStepSize;
+	case 0x12:
+		return kActionDecreaseStepSize;
+	case 0x16:
+		return kActionShoot;
+	case 0x1E:
+		return kActionChangeMode;
+	case 0x28:
+		return kActionDeployDrillingRig;
+	case 0x29:
+		return kActionInfoMenu;
+
 	default:
 		error("Invalid key index: %x", index);
 	}

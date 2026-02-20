@@ -97,6 +97,7 @@ private:
 	void loadAssetsC64FullGame() override;
 
 	void drawDOSUI(Graphics::Surface *surface) override;
+	void runDemoTrace();
 	void drawZXUI(Graphics::Surface *surface) override;
 	void drawCPCUI(Graphics::Surface *surface) override;
 	void drawC64UI(Graphics::Surface *surface) override;
