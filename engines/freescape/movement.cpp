@@ -110,7 +110,7 @@ void FreescapeEngine::initKeymaps(Common::Keymap *engineKeyMap, Common::Keymap *
 	engineKeyMap->addAction(act);
 }
 
-Math::AABB createPlayerAABB(Math::Vector3d const position, int playerHeight, float reductionHeight = 0.0f) {
+Math::AABB createPlayerAABB(Math::Vector3d const position, float playerHeight, float reductionHeight = 0.0f) {
 	Math::Vector3d v1(position.x() + 1, position.y() - playerHeight * reductionHeight - 1, position.z() + 1);
 	Math::Vector3d v2(position.x() - 1, position.y() - playerHeight, position.z() - 1);
 
@@ -151,13 +151,13 @@ void FreescapeEngine::traverseEntrance(uint16 entranceID) {
 	}
 
 	// TODO: verify if this is needed
-	/*if (scale == 1) {
+	if (scale == 1) {
 		_position.x() = _position.x() + 16;
 		_position.z() = _position.z() + 16;
 	} else if (scale == 5) {
 		_position.x() = _position.x() + 4;
 		_position.z() = _position.z() + 4;
-	}*/
+	}
 
 	if (rotation.x() >= 0 && rotation.y() >= 0 && rotation.z() >= 0) {
 		_pitch = rotation.x();
@@ -284,6 +284,10 @@ void FreescapeEngine::changePlayerHeight(int index) {
 
 	_position.setValue(1, _position.y() - _playerHeight);
 	_playerHeight = 32 * (index + 1) - 16 / float(scale);
+
+	if (isDriller()) {
+		_playerHeight -= 3.0f / (scale * 2.0f); // 3 dos units converted to ScummVM units (1.5)
+	}
 	assert(_playerHeight > 0);
 	_position.setValue(1, _position.y() + _playerHeight);
 }
@@ -396,22 +400,41 @@ void FreescapeEngine::updatePlayerMovementClassic(float deltaTime) {
 	debugC(1, kFreescapeDebugMove, "old player position: %f, %f, %f", _position.x(), _position.y(), _position.z());
 	int previousAreaID = _currentArea->getAreaID();
 
+	int stepSize = _playerSteps[_playerStepIndex];
+
+	int headingInt = (int)(_yaw);
+	if (headingInt < 0)
+		headingInt = 360 + (headingInt % 360);
+	headingInt %= 360;
+
+	int headingIndex = headingInt / 5;
+
+	int trigX = (int8)kCosineSineTable[headingIndex][0];
+	int trigZ = (int8)kCosineSineTable[headingIndex][1];
+
 	Math::Vector3d stepFront;
 	Math::Vector3d stepRight;
 
-	if (_playerSteps[_playerStepIndex] > 2) {
-		stepFront = _cameraFront * (float(_playerSteps[_playerStepIndex]) / 2 / _cameraFront.length());
-		stepRight = _cameraRight * (float(_playerSteps[_playerStepIndex]) / 2 / _cameraRight.length());
+	if (stepSize > 2) {
 
-		stepFront.x() = floor(stepFront.x()) + 0.5;
-		stepFront.z() = floor(stepFront.z()) + 0.35;
+		int scale = _currentArea->getScale();
+		int speed = stepSize * scale;
+
+		int dos_dx = (speed * trigX) >> 6;
+		int dos_dz = (speed * trigZ) >> 6;
+
+		stepFront.x() = (float)dos_dx / (scale * 2.0f);
+		stepFront.y() = 0.0f;
+		stepFront.z() = (float)dos_dz / (scale * 2.0f);
 	} else {
-		stepFront = _cameraFront * (float(_playerSteps[_playerStepIndex]) / _cameraFront.length());
-		stepRight = _cameraRight * (float(_playerSteps[_playerStepIndex]) / _cameraRight.length());
-
-		stepFront.x() = ceil(stepFront.x());
-		stepFront.z() = ceil(stepFront.z());
+		stepFront.x() = stepSize * trigX / 64.0f;
+		stepFront.y() = 0.0f;
+		stepFront.z() = stepSize * trigZ / 64.0f;
 	}
+
+	stepRight.x() = -stepFront.z();
+	stepRight.y() = 0.0f;
+	stepRight.z() = stepFront.x();
 
 	float positionY = _position.y();
 	Math::Vector3d destination = _position;
@@ -432,12 +455,13 @@ void FreescapeEngine::updatePlayerMovementClassic(float deltaTime) {
 
 	if (!_flyMode)
 		destination.y() = positionY;
+
 	resolveCollisions(destination);
 	checkIfStillInArea();
 
 	_lastPosition = _position;
 	debugC(1, kFreescapeDebugMove, "new player position: %f, %f, %f", _position.x(), _position.y(), _position.z());
-	//debugC(1, kFreescapeDebugMove, "player height: %f", _position.y() - areaScale * _playerHeight);
+
 	if (_currentArea->getAreaID() == previousAreaID)
 		executeMovementConditions();
 	_gotoExecuted = false;

@@ -416,7 +416,7 @@ public:
 	Math::Vector3d _lastPosition;
 	int _playerHeightNumber;
 	int _playerHeightMaxNumber;
-	uint16 _playerHeight;
+	float _playerHeight;
 	uint16 _playerWidth;
 	uint16 _playerDepth;
 	uint16 _stepUpDistance;
@@ -666,6 +666,7 @@ enum GameReleaseFlags {
 
 extern FreescapeEngine *g_freescape;
 extern Debugger *g_debugger;
+extern const uint8 kCosineSineTable[72][2];
 
 } // namespace Freescape
 

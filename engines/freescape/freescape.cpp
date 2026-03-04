@@ -355,7 +355,7 @@ void FreescapeEngine::drawTitle() {
 	_gfx->setViewport(_viewArea);
 }
 
-static uint8 kCosineSineTable [72][2] {
+const uint8 kCosineSineTable [72][2] {
 	// Each "dw" contains (cos, sin) (one byte each):
 	// [-64, 64]
 	// 72 steps is a whole turn.

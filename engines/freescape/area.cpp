@@ -499,7 +499,7 @@ Math::Vector3d Area::separateFromWall(const Math::Vector3d &_position) {
 	return position;
 }
 
-Math::Vector3d Area::resolveCollisions(const Math::Vector3d &lastPosition_, const Math::Vector3d &newPosition_, int playerHeight) {
+Math::Vector3d Area::resolveCollisions(const Math::Vector3d &lastPosition_, const Math::Vector3d &newPosition_, float playerHeight) {
 	Math::Vector3d position = newPosition_;
 	Math::Vector3d lastPosition = lastPosition_;
 
