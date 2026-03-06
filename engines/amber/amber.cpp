@@ -31,6 +31,7 @@
 #include "engines/util.h"
 #include "graphics/paletteman.h"
 #include "common/file.h"
+#include "common/memstream.h"
 
 namespace Amber {
 
@@ -68,10 +69,10 @@ Common::Error AmberEngine::run() {
 		debug("File size: %d bytes", fileSize);
 
 		// amiga works in big endian unlike the modern architectures which use little endian
-		uint32 firstWord = testFile.readUint16BE();
+		uint32 magic = testFile.readUint16BE();
 
-		if (firstWord == 0x4A48) { // JH encryption 
-			uint16 key = testFile.readUint16BE(); // read the starting key
+		if (magic == 0x4A48) { // JH encryption 
+			uint16 key = testFile.readUint16BE() ^ magic; // read the starting key
 			uint32 dataSize = testFile.size() - 4; // subtract 2 bytes for JH (0x4A48) and 2 bytes for the key just read
 
 			byte *data = (byte *)malloc(dataSize);
@@ -102,21 +103,23 @@ Common::Error AmberEngine::run() {
 				value ^= d0;
 				data[offset++] = (value >> 8) & 0xFF;
 			}
+			Common::MemoryReadStream stream(data, dataSize);
 
-			char printBuffer[81]; // 80 characters + 1 null terminator
-			uint32 bufferIndex = 0;
+			uint32 magicLOB = stream.readUint32BE();
+			if (magicLOB == 0x014C4F42) {
+				debug("LOB Compression!");
 
-			for (uint32 i = 0; i < dataSize; i++) {
-				// filter out unreadable bytes
-				printBuffer[bufferIndex++] = (data[i] >= 32 && data[i] <= 126) ? (char)data[i] : '.';
+				// read the next 4 bytes (LOB header)
+				uint32 lobHeader = stream.readUint32BE();
 
-				// when we reach 80 characters, or the very last byte of the file then we print and reset the buffer
-				if (bufferIndex == 80 || i == dataSize - 1) {
-					printBuffer[bufferIndex] = '\0';
-					debug("%s", printBuffer);
-					bufferIndex = 0;
-				}
+				// extract the size and type using pyrdacor's c# logic
+				uint32 decodedSize = lobHeader & 0x00FFFFFF;
+				uint8 lobType = lobHeader >> 24;
+
+				debug("Algorithm Type: 0x%02X", lobType);
+				debug("Uncompressed File Size: %d bytes", decodedSize);
 			}
+
 
 			free(data);
 		} else {
