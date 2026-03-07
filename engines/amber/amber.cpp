@@ -116,11 +116,72 @@ Common::Error AmberEngine::run() {
 				uint32 decodedSize = lobHeader & 0x00FFFFFF;
 				uint8 lobType = lobHeader >> 24;
 
+				uint32 compressedSize = stream.readUint32BE();
+
 				debug("Algorithm Type: 0x%02X", lobType);
 				debug("Uncompressed File Size: %d bytes", decodedSize);
+				debug("Compressed Size: %d bytes", compressedSize);
+
+				byte *decodedData = (byte *)malloc(decodedSize);
+				uint32 decodeIndex = 0;
+
+				while (decodeIndex < decodedSize && !stream.eos()) {
+					// the control byte
+					// read 1 byte, the 8 bits inside tell us what the next 8 items are [literal or (distance, length)]
+					uint8 header = stream.readByte();
+
+					// process all the 8 items for this group
+					for (int i = 0; i < 8 && decodeIndex < decodedSize; i++) {
+
+						// we check the msb of the header (if it is 0 the current item is a pointer else it is just a literal)
+						if ((header & 0x80) == 0) {
+							// the next 2 bytes are containing distance and length
+							// in the format: 12 bits for distance 4 bits for length
+							// byte1: first 4 bits have distance and next 4 bits have length
+							// byte2: contains distance
+
+							// read the first byte
+							uint32 matchOffset = stream.readByte();
+
+							// the LOB compression assumes that the minimum length of a compressed string will be 3
+							// because it is not worth compressing 1 or 2 characters.
+							uint32 matchLength = (matchOffset & 0x0F) + 3;
+
+							// move the top 4 bits of byte1 to the left
+							matchOffset <<= 4;
+
+							// mask off the length data in the middle so we are left with distance
+							matchOffset &= 0xFF00;
+
+							// read byte2 and merge it in to complete the 12 bit distance number
+							matchOffset |= stream.readByte();
+
+							// calculate where in our history to look
+							uint32 matchIndex = decodeIndex - matchOffset;
+
+							// copy the old letters forward, one by one, until we hit the length
+							while (matchLength-- != 0 && decodeIndex < decodedSize)
+								decodedData[decodeIndex++] = decodedData[matchIndex++];
+						} else {
+							// it's just a regular letter, read 1 byte and save it
+							decodedData[decodeIndex++] = stream.readByte();
+						}
+						// shift the control byte left by 1
+						header <<= 1;
+					}
+				}
+
+				debug("Decompression Complete!");
+
+				char preview[10001];
+				for (uint32 i = 0; i < 1000; i++)
+					preview[i] = (decodedData[i] >= 32 && decodedData[i] <= 126) ? decodedData[i] : '.';
+
+				preview[1000] = '\0';
+				debug("%s", preview);
+
+				free(decodedData);
 			}
-
-
 			free(data);
 		} else {
 			warning("File is not JH encrypted!");
