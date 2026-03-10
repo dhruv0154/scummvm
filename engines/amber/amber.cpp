@@ -32,6 +32,7 @@
 #include "graphics/paletteman.h"
 #include "common/file.h"
 #include "common/memstream.h"
+#include "archive.h"
 
 namespace Amber {
 
@@ -61,136 +62,6 @@ Common::Error AmberEngine::run() {
 
 	// Set the engine's debugger console
 	setDebugger(new Console());
-
-	Common::File testFile;
-
-	if (testFile.open("Text.amb")) {
-		uint32 fileSize = testFile.size();
-		debug("File size: %d bytes", fileSize);
-
-		// amiga works in big endian unlike the modern architectures which use little endian
-		uint32 magic = testFile.readUint16BE();
-
-		if (magic == 0x4A48) { // JH encryption 
-			uint16 key = testFile.readUint16BE() ^ magic; // read the starting key
-			uint32 dataSize = testFile.size() - 4; // subtract 2 bytes for JH (0x4A48) and 2 bytes for the key just read
-
-			byte *data = (byte *)malloc(dataSize);
-
-			uint32 numWords = dataSize / 2; // 2 bytes for one word
-			bool hasOddByte = (dataSize % 2) != 0; // check if there is 1 leftover byte
-
-			uint16 d0 = key;
-			uint16 d1 = 0;
-			uint32 offset = 0;
-
-			// read the full 16 bit words one by one
-			for (uint32 i = 0; i < numWords; ++i) {
-				uint16 value = testFile.readUint16BE();
-				value ^= d0;
-
-				data[offset++] = (value >> 8) & 0xFF;
-				data[offset++] = value & 0xFF;
-
-				d1 = d0;
-				d0 <<= 4;
-				d0 = (d0 + d1 + 87) & 0xFFFF;
-			}
-
-			// handle the edge case if the file has an odd number of bytes
-			if (hasOddByte) {
-				uint16 value = testFile.readByte() << 8;
-				value ^= d0;
-				data[offset++] = (value >> 8) & 0xFF;
-			}
-			Common::MemoryReadStream stream(data, dataSize);
-
-			uint32 magicLOB = stream.readUint32BE();
-			if (magicLOB == 0x014C4F42) {
-				debug("LOB Compression!");
-
-				// read the next 4 bytes (LOB header)
-				uint32 lobHeader = stream.readUint32BE();
-
-				// extract the size and type using pyrdacor's c# logic
-				uint32 decodedSize = lobHeader & 0x00FFFFFF;
-				uint8 lobType = lobHeader >> 24;
-
-				uint32 compressedSize = stream.readUint32BE();
-
-				debug("Algorithm Type: 0x%02X", lobType);
-				debug("Uncompressed File Size: %d bytes", decodedSize);
-				debug("Compressed Size: %d bytes", compressedSize);
-
-				byte *decodedData = (byte *)malloc(decodedSize);
-				uint32 decodeIndex = 0;
-
-				while (decodeIndex < decodedSize && !stream.eos()) {
-					// the control byte
-					// read 1 byte, the 8 bits inside tell us what the next 8 items are [literal or (distance, length)]
-					uint8 header = stream.readByte();
-
-					// process all the 8 items for this group
-					for (int i = 0; i < 8 && decodeIndex < decodedSize; i++) {
-
-						// we check the msb of the header (if it is 0 the current item is a pointer else it is just a literal)
-						if ((header & 0x80) == 0) {
-							// the next 2 bytes are containing distance and length
-							// in the format: 12 bits for distance 4 bits for length
-							// byte1: first 4 bits have distance and next 4 bits have length
-							// byte2: contains distance
-
-							// read the first byte
-							uint32 matchOffset = stream.readByte();
-
-							// the LOB compression assumes that the minimum length of a compressed string will be 3
-							// because it is not worth compressing 1 or 2 characters.
-							uint32 matchLength = (matchOffset & 0x0F) + 3;
-
-							// move the top 4 bits of byte1 to the left
-							matchOffset <<= 4;
-
-							// mask off the length data in the middle so we are left with distance
-							matchOffset &= 0xFF00;
-
-							// read byte2 and merge it in to complete the 12 bit distance number
-							matchOffset |= stream.readByte();
-
-							// calculate where in our history to look
-							uint32 matchIndex = decodeIndex - matchOffset;
-
-							// copy the old letters forward, one by one, until we hit the length
-							while (matchLength-- != 0 && decodeIndex < decodedSize)
-								decodedData[decodeIndex++] = decodedData[matchIndex++];
-						} else {
-							// it's just a regular letter, read 1 byte and save it
-							decodedData[decodeIndex++] = stream.readByte();
-						}
-						// shift the control byte left by 1
-						header <<= 1;
-					}
-				}
-
-				debug("Decompression Complete!");
-
-				char preview[10001];
-				for (uint32 i = 0; i < 1000; i++)
-					preview[i] = (decodedData[i] >= 32 && decodedData[i] <= 126) ? decodedData[i] : '.';
-
-				preview[1000] = '\0';
-				debug("%s", preview);
-
-				free(decodedData);
-			}
-			free(data);
-		} else {
-			warning("File is not JH encrypted!");
-		}
-
-		testFile.close();
-	} else {
-		warning("Could not open Text.amb.");
-	}
 
 	// If a savegame was selected from the launcher, load it
 	int saveSlot = ConfMan.getInt("save_slot");
@@ -225,6 +96,86 @@ Common::Error AmberEngine::run() {
 	}
 
 	return Common::kNoError;
+}
+
+void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {
+	// 32 colors * 3 bytes per color = 96 bytes total
+	// there are total 32 colors in Pallette.amb in game files
+	// each color is packed in 2 bytes
+	byte colorPalette[32 * 3];
+
+	for (int i = 0; i < 32; ++i) {
+
+		// reads the 16 bit 0x0RGB color
+		// 0x0RGB because amiga could not read 12 bits it could only read (8, 16, 32)
+		// so 4 bits are wasted due to amiga hardware limitations
+		uint16 amigaColor = stream->readUint16BE();
+
+		// we extract the 4 bit amiga RGB nibbles
+		uint8 r = (amigaColor >> 8) & 0x0F;
+		uint8 g = (amigaColor >> 4) & 0x0F;
+		uint8 b = amigaColor & 0x0F;
+
+		// scales the 4 bit amiga color (0-15) to an 8 bit color (0-255)
+		// by shifting the bits left by 4 and bitwise OR them with the original value
+		colorPalette[i * 3 + 0] = (r << 4) | r; // Red
+		colorPalette[i * 3 + 1] = (g << 4) | g; // Green
+		colorPalette[i * 3 + 2] = (b << 4) | b; // Blue
+	}
+
+	g_system->getPaletteManager()->setPalette(colorPalette, 0, 32);
+}
+
+Graphics::Surface *AmberEngine::decodePlanarGraphic(Common::SeekableReadStream *stream, uint16 width,
+													uint16 height, uint8 planes) {
+	Graphics::Surface *surface = new Graphics::Surface();
+
+	surface->create(width, height, Graphics::PixelFormat::createFormatCLUT8());
+
+	// amiga packs 8 pixels into 1 byte, we divide width by 8 to find bytes per row
+	// +7 is used for cases like if an image is 33 pixels wide 33/2 = 4 but we have 1 pixel left over
+	// we need 5 bytes to hold 33 pixels (33+7)/8 = 5
+	uint32 bytesPerRow = (width + 7) / 8;
+	uint32 planeSize = bytesPerRow * height;   // total bytes for one single plane
+	uint32 totalDataSize = planeSize * planes; // total bytes for all planes combined
+
+	byte *planarData = (byte *)malloc(totalDataSize);
+	stream->read(planarData, totalDataSize);
+
+	// decode the image pixel by pixel
+	for (uint16 y = 0; y < height; y++) {
+		// grab a pointer to the start of the current row on our surface
+		byte *row = (byte *)surface->getBasePtr(0, y);
+
+		for (uint16 x = 0; x < width; x++) {
+			// on which bit on this byte is our coordinate
+			uint8 bitIndex = x % 8;
+			byte paletteIndex = 0; // this will hold our final, stacked color index
+
+			uint32 rowOffset = y * (bytesPerRow * planes);
+			uint32 byteOffset = x / 8;
+
+			// stack the planes to build the color since amiga uses plane graphics
+			for (uint8 p = 0; p < planes; p++) {
+
+				// jump to the correct plane's memory block, then find our specific byte
+				uint32 planeOffset = p * bytesPerRow;
+				uint32 dataOffset = rowOffset + planeOffset + byteOffset;
+
+				// amiga reads bits visually from left to right (big endian)
+				// so if we want pixel 0, we check bit 7, pixel 1 = bit 6,..
+				if (planarData[dataOffset] & (1 << (7 - bitIndex))) {
+					// if there is a 1 on this plane, add its value to our color
+					paletteIndex |= (1 << p);
+				}
+			}
+
+			row[x] = paletteIndex;
+		}
+	}
+
+	free(planarData);
+	return surface;
 }
 
 Common::Error AmberEngine::syncGame(Common::Serializer &s) {

@@ -53,6 +53,10 @@ public:
 	AmberEngine(OSystem *syst, const ADGameDescription *gameDesc);
 	~AmberEngine() override;
 
+	void loadAmigaPalette(Common::SeekableReadStream *stream);
+	Graphics::Surface *decodePlanarGraphic(Common::SeekableReadStream *stream, uint16 width,
+		uint16 height, uint8 planes);
+
 	uint32 getFeatures() const;
 
 	/**

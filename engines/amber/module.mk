@@ -2,6 +2,8 @@ MODULE := engines/amber
 
 MODULE_OBJS = \
 	amber.o \
+	decoders.o \
+	archive.o \
 	console.o \
 	metaengine.o
 
