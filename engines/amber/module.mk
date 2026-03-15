@@ -6,6 +6,7 @@ MODULE_OBJS = \
 	archive.o \
 	console.o \
 	amiga.o \
+	font.o \
 	metaengine.o
 
 # This module can be built as a plugin
