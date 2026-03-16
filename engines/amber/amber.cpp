@@ -127,7 +127,7 @@ void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {
 }
 
 Graphics::Surface *AmberEngine::decodePlanarGraphic(Common::SeekableReadStream *stream, uint16 width,
-													uint16 height, uint8 planes) {
+													uint16 height, uint8 planes, uint8 paletteOffset) {
 	Graphics::Surface *surface = new Graphics::Surface();
 
 	surface->create(width, height, Graphics::PixelFormat::createFormatCLUT8());
@@ -170,11 +170,43 @@ Graphics::Surface *AmberEngine::decodePlanarGraphic(Common::SeekableReadStream *
 				}
 			}
 
-			row[x] = paletteIndex;
+			row[x] = paletteIndex + paletteOffset;
 		}
 	}
 
 	free(planarData);
+	return surface;
+}
+
+Graphics::Surface *AmberEngine::decodePlanarGraphic(const byte *planarData, uint16 width,
+													uint16 height, uint8 planes, uint8 paletteOffset) {
+	Graphics::Surface *surface = new Graphics::Surface();
+	surface->create(width, height, Graphics::PixelFormat::createFormatCLUT8());
+
+	uint32 bytesPerRow = (width + 7) / 8;
+
+	for (uint16 y = 0; y < height; y++) {
+		byte *row = (byte *)surface->getBasePtr(0, y);
+
+		for (uint16 x = 0; x < width; x++) {
+			uint8 bitIndex = x % 8;
+			byte paletteIndex = 0;
+
+			uint32 rowOffset = y * (bytesPerRow * planes);
+			uint32 byteOffset = x / 8;
+
+			for (uint8 p = 0; p < planes; p++) {
+				uint32 planeOffset = p * bytesPerRow;
+				uint32 dataOffset = rowOffset + planeOffset + byteOffset;
+
+				if (planarData[dataOffset] & (1 << (7 - bitIndex))) {
+					paletteIndex |= (1 << p);
+				}
+			}
+			row[x] = paletteIndex + paletteOffset;
+		}
+	}
+
 	return surface;
 }
 
