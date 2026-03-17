@@ -35,6 +35,10 @@
 #include "graphics/screen.h"
 
 #include "amber/detection.h"
+#include "font.h"
+#include "cursor.h"
+#include "amiga.h"
+#include "ui.h"
 
 namespace Amber {
 
@@ -48,6 +52,9 @@ protected:
 	// Engine APIs
 	Common::Error run() override;
 public:
+	AmberFont *_font;
+	AmberCursor *_cursor;
+	AmberUI *_ui;
 	Graphics::Screen *_screen = nullptr;
 public:
 	AmberEngine(OSystem *syst, const ADGameDescription *gameDesc);

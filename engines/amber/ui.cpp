@@ -27,6 +27,8 @@ namespace Amber {
 AmberUI::AmberUI() {
 	for (int i = 0; i < 8; ++i)
 		_frames[i] = nullptr;
+	_btnFrameNormal = nullptr;
+	_btnFramePressed = nullptr;
 }
 
 AmberUI::~AmberUI() {
@@ -35,6 +37,10 @@ AmberUI::~AmberUI() {
 			_frames[i]->free();
 			delete _frames[i];
 		}
+	}
+	if (_btnFrameNormal) {
+		_btnFrameNormal->free();
+		delete _btnFrameNormal;
 	}
 }
 
@@ -53,6 +59,16 @@ bool AmberUI::load(const AmigaExecutable &exe, AmberEngine *engine) {
 		_frames[i] = engine->decodePlanarGraphic(hunk0 + offset, 16, 16, 3, 24);
 		offset += 96; // advance 96 bytes to the next frame
 	}
+
+	// jump forward to extract button frames
+	uint32 buttonOffset = 10336;
+
+	// 32x17 pixels, 3 bit depth, +24 palette offset
+	_btnFrameNormal = engine->decodePlanarGraphic(hunk0 + buttonOffset, 32, 17, 3, 24);
+
+	// advance 204 bytes for the next frame
+	buttonOffset += 204;
+	_btnFramePressed = engine->decodePlanarGraphic(hunk0 + buttonOffset, 32, 17, 3, 24);
 
 	return true;
 }
@@ -108,6 +124,15 @@ void AmberUI::drawBox(Graphics::Screen *screen, Common::Rect area, bool sunken) 
 
 	// fill the center
 	screen->fillRect(Common::Rect(area.left + 1, area.top + 1, area.right, area.bottom), fillColor);
+}
+
+void AmberUI::drawButton(Graphics::Screen *screen, int x, int y, bool pressed) {
+	if (!screen)
+		return;
+
+	Graphics::Surface *frame = pressed ? _btnFramePressed : _btnFrameNormal;
+	if (frame)
+		screen->transBlitFrom(*frame, Common::Point(x, y), 24);
 }
 
 } // End of namespace Amber

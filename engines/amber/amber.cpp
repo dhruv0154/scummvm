@@ -33,6 +33,8 @@
 #include "common/file.h"
 #include "common/memstream.h"
 #include "archive.h"
+#include "graphics/cursorman.h"
+#include "character_creator.h"
 
 namespace Amber {
 
@@ -41,10 +43,16 @@ AmberEngine *g_engine;
 AmberEngine::AmberEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 	_gameDescription(gameDesc), _randomSource("Amber") {
 	g_engine = this;
+	_font = new AmberFont();
+	_cursor = new AmberCursor();
+	_ui = new AmberUI();
 }
 
 AmberEngine::~AmberEngine() {
 	delete _screen;
+	delete _font;
+	delete _cursor;
+	delete _ui;
 }
 
 uint32 AmberEngine::getFeatures() const {
@@ -68,32 +76,38 @@ Common::Error AmberEngine::run() {
 	if (saveSlot != -1)
 		(void)loadGameState(saveSlot);
 
-	// Draw a series of boxes on screen as a sample
-	for (int i = 0; i < 100; ++i)
-		_screen->frameRect(Common::Rect(i, i, 320 - i, 200 - i), i);
+	// load the game exe file
+	Common::File cpuFile;
+	if (!cpuFile.open("AM2_CPU"))
+		error("Failed to open AM2_CPU");
+
+	AmigaExecutable exe;
+	if (!exe.load(&cpuFile))
+		error("Failed to parse AM2_CPU");
+
+	// load cursor & main color palette
+	if (_cursor->load(exe, this)) {
+		g_system->getPaletteManager()->setPalette(_cursor->getUIPalette(), 0, 32);
+
+		CursorData *mousePointer = _cursor->getCursor(0); // sword cursor
+		if (mousePointer && mousePointer->surface) {
+			CursorMan.pushCursor(
+				mousePointer->surface->getPixels(), mousePointer->surface->w, mousePointer->surface->h,
+				mousePointer->hotspotX, mousePointer->hotspotY,
+				24, false, &mousePointer->surface->format);
+			CursorMan.showMouse(true);
+		}
+	}
+
+	// load UI borders and font
+	_ui->load(exe, this);
+	_font->load(exe);
+
+	_screen->fillRect(Common::Rect(0, 0, 320, 200), 0);
 	_screen->update();
 
-	// Simple event handling loop
-	byte pal[256 * 3] = { 0 };
-	Common::Event e;
-	int offset = 0;
-
-	Graphics::FrameLimiter limiter(g_system, 60);
-	while (!shouldQuit()) {
-		while (g_system->getEventManager()->pollEvent(e)) {
-		}
-
-		// Cycle through a simple palette
-		++offset;
-		for (int i = 0; i < 256; ++i)
-			pal[i * 3 + 1] = (i + offset) % 256;
-		g_system->getPaletteManager()->setPalette(pal, 0, 256);
-		// Delay for a bit. All events loops should have a delay
-		// to prevent the system being unduly loaded
-		limiter.delayBeforeSwap();
-		_screen->update();
-		limiter.startFrame();
-	}
+	CharacterCreator creator(this);
+	creator.execute();
 
 	return Common::kNoError;
 }

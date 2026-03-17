@@ -8,6 +8,8 @@ MODULE_OBJS = \
 	amiga.o \
 	font.o \
 	ui.o \
+	cursor.o \
+	character_creater.o \
 	metaengine.o
 
 # This module can be built as a plugin

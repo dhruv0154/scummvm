@@ -33,6 +33,8 @@ class AmberEngine;
 class AmberUI {
 private:
 	Graphics::Surface *_frames[8];
+	Graphics::Surface *_btnFrameNormal;
+	Graphics::Surface *_btnFramePressed;
 
 	enum FrameType {
 		FRAME_UPPER_LEFT,
@@ -56,6 +58,7 @@ public:
 
 	// draws the 3D boxes used for buttons and text inputs
 	void drawBox(Graphics::Screen *screen, Common::Rect area, bool sunken);
+	void drawButton(Graphics::Screen *screen, int x, int y, bool pressed = false);
 };
 
 } // End of namespace Amber
