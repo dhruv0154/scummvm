@@ -90,7 +90,7 @@ private:
 	AmberMap _map; // the current map data
 	AmberTileset _tileset; // the graphics for the map
 	AmberPlayer _player;
-
+	int _pressedButtonIndex = -1;
 	int _cameraTileX;
 	int _cameraTileY;
 	bool _isAmberstar; // toggle for collision testing

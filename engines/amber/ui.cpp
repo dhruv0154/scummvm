@@ -23,6 +23,7 @@
 #include "amber/amber.h"
 #include "amber/archive.h"
 #include "graphics/paletteman.h"
+#include "decoders.h"
 
 namespace Amber {
 
@@ -31,6 +32,8 @@ AmberUI::AmberUI() {
 		_frames[i] = nullptr;
 	for (int i = 0; i < 6; ++i)
 		_portraits[i] = nullptr;
+	for (int i = 0; i < 9; ++i)
+		_buttonIcons[i] = nullptr;
 	_btnFrameNormal = nullptr;
 	_btnFramePressed = nullptr;
 	_explorationLayout = nullptr;
@@ -52,6 +55,12 @@ AmberUI::~AmberUI() {
 		if (_portraits[i]) {
 			_portraits[i]->free();
 			delete _portraits[i];
+		}
+	}
+	for (int i = 0; i < 9; ++i) {
+		if (_buttonIcons[i]) {
+			_buttonIcons[i]->free();
+			delete _buttonIcons[i];
 		}
 	}
 	if (_btnFrameNormal) {
@@ -356,10 +365,52 @@ bool AmberUI::loadExplorationLayout(AmberEngine *engine) {
 			// 3-Bit planar, +24 plaetteOffset
 			_explorationLayout = engine->decodePlanarGraphic(stream, UIConstants::LAYOUT_WIDTH, UIConstants::LAYOUT_HEIGHT, 3, 24);
 			delete stream;
-			archive.close();
-			return true;
 		}
 		archive.close();
+	}
+
+	Common::File btnFile;
+	if (btnFile.open("Button_graphics")) {
+		Common::SeekableReadStream *activeStream = &btnFile;
+		Common::SeekableReadStream *decryptedStream = nullptr;
+		Common::SeekableReadStream *decompressedStream = nullptr;
+
+		// decrypt (JH)
+		uint32 header = activeStream->readUint32BE();
+		if ((header & 0xFFFF0000) == 0x4A480000) {
+			uint16 key = ((header >> 16) & 0xFFFF) ^ (header & 0xFFFF);
+			decryptedStream = createJHStream(activeStream, key, btnFile.size() - 4);
+			activeStream = decryptedStream;
+			header = activeStream->readUint32BE(); // read the next header from the decrypted data
+		}
+
+		// decompress (LOB)
+		if (header == 0x014C4F42) {
+			uint32 decodedSize = activeStream->readUint32BE() & 0x00FFFFFF;
+			activeStream->readUint32BE();
+			decompressedStream = createLOBStream(activeStream, decodedSize);
+			activeStream = decompressedStream;
+		}
+
+		// the icons are 32x13 pixels, 3-bit color, each is 156 bytes
+		// map our 9 grid buttons to their specific indices in the file:
+		// Up-Left (8), Up (9), Up-Right (10)
+		// Left (11), Wait (71), Right (12)
+		// Down-Left (13), [7] Down (14), [8] Down-Right (15)
+		int iconIndices[9] = {8, 9, 10, 11, 71, 12, 13, 14, 15};
+
+		for (int i = 0; i < 9; i++) {
+			activeStream->seek(iconIndices[i] * 156);
+			_buttonIcons[i] = engine->decodePlanarGraphic(activeStream, 32, 13, 3, 24);
+		}
+
+		if (decompressedStream)
+			delete decompressedStream;
+		if (decryptedStream)
+			delete decryptedStream;
+		btnFile.close();
+	} else {
+		warning("AmberUI: Failed to open Button_graphics!");
 	}
 
 	warning("AmberUI: Failed to load exploration layout from Layouts.amb!");

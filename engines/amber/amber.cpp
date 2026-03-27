@@ -251,11 +251,9 @@ void AmberEngine::handleInput() {
 	Common::Event e;
 
 	while (g_system->getEventManager()->pollEvent(e)) {
-
+		int dx = 0;
+		int dy = 0;
 		if (e.type == Common::EVENT_KEYDOWN) {
-			int dx = 0;
-			int dy = 0;
-
 			// check which arrow key was pressed and update the player's facing direction
 			// also set the delta x (dx) or delta y (dy) to move 1 tile in that direction
 			if (e.kbd.keycode == Common::KEYCODE_UP) {
@@ -271,23 +269,84 @@ void AmberEngine::handleInput() {
 				dx = 1;
 				_player.facing = DIR_RIGHT;
 			}
+		} else if (e.type == Common::EVENT_LBUTTONDOWN) {
+			Common::Point mousePos = g_system->getEventManager()->getMousePos();
 
-			// if dx or dy is not zero, it means the player actually tried to move
-			if (dx != 0 || dy != 0) {
-				// calculate the tile the player wants to step onto
-				int targetX = _player.mapX + dx;
-				int targetY = _player.mapY + dy;
+			// check if click is inside the 3x3 movement pad (X: 208-304, Y: 143-194)
+			if (mousePos.x >= 208 && mousePos.x < 304 && mousePos.y >= 143 && mousePos.y < 194) {
+				int col = (mousePos.x - 208) / 32;
+				int row = (mousePos.y - 143) / 17;
+				_pressedButtonIndex = row * 3 + col;
+			}
+		} else if (e.type == Common::EVENT_MOUSEMOVE) {
+			if (_pressedButtonIndex != -1) {
+				Common::Point mousePos = g_system->getEventManager()->getMousePos();
+				int col = _pressedButtonIndex % 3;
+				int row = _pressedButtonIndex / 3;
+				Common::Rect btnRect(208 + col * 32, 143 + row * 17, 208 + (col + 1) * 32, 143 + (row + 1) * 17);
 
-				// ask the map if this specific tile allows walking
-				// if it does, we update the player's actual position
-				if (_map.allowMovement(targetX, targetY, &_tileset, TRAVEL_WALK, _isAmberstar)) {
-					_player.mapX = targetX;
-					_player.mapY = targetY;
-
-					// lock the camera to follow the player new position
-					_cameraTileX = _player.mapX;
-					_cameraTileY = _player.mapY;
+				if (!btnRect.contains(mousePos)) {
+					_pressedButtonIndex = -1; // release the button
 				}
+			}
+		} else if (e.type == Common::EVENT_LBUTTONUP) {
+			if (_pressedButtonIndex != -1) {
+				Common::Point mousePos = g_system->getEventManager()->getMousePos();
+				int col = _pressedButtonIndex % 3;
+				int row = _pressedButtonIndex / 3;
+				Common::Rect btnRect(208 + col * 32, 143 + row * 17, 208 + (col + 1) * 32, 143 + (row + 1) * 17);
+
+				if (btnRect.contains(mousePos)) {
+					// map the button index to movement directions
+					if (_pressedButtonIndex == 0) {
+						dx = -1;
+						dy = -1;
+						_player.facing = DIR_LEFT;
+					} else if (_pressedButtonIndex == 1) {
+						dy = -1;
+						_player.facing = DIR_UP;
+					} else if (_pressedButtonIndex == 2) {
+						dx = 1;
+						dy = -1;
+						_player.facing = DIR_RIGHT;
+					} else if (_pressedButtonIndex == 3) {
+						dx = -1;
+						_player.facing = DIR_LEFT;
+					} else if (_pressedButtonIndex == 5) {
+						dx = 1;
+						_player.facing = DIR_RIGHT;
+					} else if (_pressedButtonIndex == 6) {
+						dx = -1;
+						dy = 1;
+						_player.facing = DIR_LEFT;
+					} else if (_pressedButtonIndex == 7) {
+						dy = 1;
+						_player.facing = DIR_DOWN;
+					} else if (_pressedButtonIndex == 8) {
+						dx = 1;
+						dy = 1;
+						_player.facing = DIR_RIGHT;
+					}
+				}
+				_pressedButtonIndex = -1;
+			}
+		}
+
+		// if dx or dy is not zero, it means the player actually tried to move
+		if (dx != 0 || dy != 0) {
+			// calculate the tile the player wants to step onto
+			int targetX = _player.mapX + dx;
+			int targetY = _player.mapY + dy;
+
+			// ask the map if this specific tile allows walking
+			// if it does, we update the player's actual position
+			if (_map.allowMovement(targetX, targetY, &_tileset, TRAVEL_WALK, _isAmberstar)) {
+				_player.mapX = targetX;
+				_player.mapY = targetY;
+
+				// lock the camera to follow the player new position
+				_cameraTileX = _player.mapX;
+				_cameraTileY = _player.mapY;
 			}
 		}
 	}
@@ -305,6 +364,25 @@ void AmberEngine::renderFrame() {
 	// draw the static user interface elements
 	_ui->drawExplorationLayout(_screen);
 	_ui->drawPortraitBar(_screen, this);
+
+	for (int i = 0; i < 9; i++) {
+		int col = i % 3;
+		int row = i / 3;
+		int btnX = 208 + col * 32;
+		int btnY = 143 + row * 17;
+		bool isPressed = (_pressedButtonIndex == i);
+
+		// draw the stone button background
+		_ui->drawButton(_screen, btnX, btnY, isPressed);
+
+		// draw the actual icon on top
+		// the icon is shifted down by 2 pixels (or 4 if pressed)
+		int iconYOffset = isPressed ? 4 : 2;
+
+		// the icon uses color 24 as the transparency key
+		if (_ui->_buttonIcons[i])
+			_screen->transBlitFrom(*_ui->_buttonIcons[i], Common::Point(btnX, btnY + iconYOffset), 24);
+	}
 
 	// render the map grid
 	// we loop through every visible row (y) and column (x) in the camera's view

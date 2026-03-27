@@ -80,6 +80,8 @@ public:
 	AmberUI();
 	~AmberUI();
 
+	Graphics::Surface *_buttonIcons[9];
+
 	bool load(const AmigaExecutable &exe, AmberEngine *engine);
 
 	// draws window with the stone borders and colored background
