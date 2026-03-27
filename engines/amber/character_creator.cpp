@@ -38,6 +38,7 @@ CharacterCreator::CharacterCreator(AmberEngine *engine) : _engine(engine) {
 	_playerName = "THALION";
 	_pressedButtonId = -1; // -1 means the mouse is not pressing any button
 	_isFemale = false;
+	_isFinished = false;
 	_portraitListIndex = 0;
 	_iconMale = _iconFemale = _iconLeft = _iconRight = _iconOk = nullptr;
 
@@ -145,7 +146,10 @@ void CharacterCreator::drawPortrait() {
 			if (portraitSurf) {
 				int winX = (320 - (16 * 16)) / 2;
 				int winY = (200 - (6 * 16)) / 2 - 8;
-				_engine->_screen->copyRectToSurface(*portraitSurf, winX + 112, winY + 32, Common::Rect(0, 0, 32, 34));
+				int destX = winX + 112;
+				int destY = winY + 32;
+				_engine->_ui->drawPortraitBackground(_engine->_screen, destX, destY);
+				_engine->_screen->transBlitFrom(*portraitSurf, Common::Point(destX, destY), 25);
 
 				portraitSurf->free();
 				delete portraitSurf;
@@ -206,10 +210,7 @@ void CharacterCreator::handleEvent(const Common::Event &e, const Common::Point &
 				_portraitListIndex = (_portraitListIndex + 1 > 3) ? 0 : _portraitListIndex + 1;
 				break;
 			case 4: // OK button
-				// this logs the final output, in the future, this is where we will set a flag
-				// to exit this loop and start the game
-				warning("Character Created: Name=%s, Female=%d, PortraitIndex=%d",
-						_playerName.c_str(), _isFemale, _portraitListIndex);
+				_isFinished = true;
 				break;
 			}
 		}
@@ -305,7 +306,7 @@ void CharacterCreator::execute() {
 	Common::Event e;
 	Graphics::FrameLimiter limiter(g_system, 60);
 
-	while (!_engine->shouldQuit()) {
+	while (!_engine->shouldQuit() && !_isFinished) {
 		Common::Point mousePos = g_system->getEventManager()->getMousePos();
 		while (g_system->getEventManager()->pollEvent(e))
 			handleEvent(e, mousePos);

@@ -43,6 +43,12 @@ public:
 	~CharacterCreator();
 
 	void execute();
+	Common::String getSelectedName() const {
+		return _playerName;
+	}
+	int getSelectedPortraitId() const {
+		return _isFemale ? _femalePortraitIds[_portraitListIndex] : _malePortraitIds[_portraitListIndex];
+	}
 
 private:
 	AmberEngine *_engine;
@@ -51,6 +57,7 @@ private:
 	int _pressedButtonId; // tracks which button is currently held down (-1 for none)
 	bool _isFemale;
 	int _portraitListIndex; // tracks which of the 4 portraits is currently selected
+	bool _isFinished;
 
 	int _winX;
 	int _winY;

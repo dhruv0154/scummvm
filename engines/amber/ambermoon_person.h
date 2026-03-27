@@ -19,37 +19,35 @@
  *
  */
 
-#ifndef AMBER_FONT_H
-#define AMBER_FONT_H
+#ifndef AMBERMOON_PERSON_H
+#define AMBERMOON_PERSON_H
 
-#include "common/scummsys.h"
-#include "common/str.h"
-#include "graphics/surface.h"
-#include "graphics/screen.h"
-#include "amber/amiga.h"
+#include "amber/amber_person.h"
 
 namespace Amber {
 
-class AmberFont {
-private:
-	// ambermoon has exactly 94 unique character graphics
-	Graphics::Surface *_glyphs[94];
-
-	// characters do not map to their ASCII index, they map to a custom index
-	// store a copy of the game's mapping table here to translate ASCII to glyph index
-	byte _mappingTable[256];
-
-	// takes the 5 byte 1 bit planar array and creates a 6x6 pixel surface
-	Graphics::Surface *decodeGlyph(byte *glyphData);
-
+class AmbermoonPerson : public AmberPerson {
 public:
-	AmberFont();
-	~AmberFont();
+	uint16 _activeSpellDurations[6];
+	uint8 _chestLockedStates[32];
 
-	bool load(const AmigaExecutable &exe);
-	void drawString(Graphics::Screen *screen, const Common::String &text, int x, int y, uint8 color = 31);
+	AmbermoonPerson(const Common::String &name, uint16 portraitId, uint16 maxHp, uint16 maxSp, bool hasMagic)
+		: AmberPerson(name, portraitId, maxHp, maxSp, hasMagic) {
+		for (int i = 0; i < 6; i++)
+			_activeSpellDurations[i] = 0;
+		for (int i = 0; i < 32; i++)
+			_chestLockedStates[i] = 0;
+	}
+
+	void levelUp() override {
+		// TODO: implement ambermoon specific logic
+	}
+
+	bool tryJoinParty() override {
+		// TODO: implement ambermoon specific logic
+		return true;
+	}
 };
 
 } // End of namespace Amber
-
-#endif // AMBER_FONT_H
+#endif // AMBERMOON_PERSON_H

@@ -39,8 +39,45 @@
 #include "cursor.h"
 #include "amiga.h"
 #include "ui.h"
+#include "amber_person.h"
+#include "amber_map.h"
 
 namespace Amber {
+
+enum CharacterDirection {
+	DIR_UP = 0,
+	DIR_RIGHT = 1,
+	DIR_DOWN = 2,
+	DIR_LEFT = 3
+};
+
+class AmberPlayer {
+public:
+	int mapX;
+	int mapY;
+	CharacterDirection facing;
+
+	// 4 directional frames
+	Graphics::Surface *sprites[4];
+
+
+	AmberPlayer() : mapX(0), mapY(0), facing(DIR_DOWN) {
+		for (int i = 0; i < 4; i++)
+			sprites[i] = nullptr;
+	}
+
+	~AmberPlayer() {
+		for (int i = 0; i < 4; i++) {
+			if (sprites[i]) {
+				sprites[i]->free();
+				delete sprites[i];
+			}
+		}
+	}
+
+	// loads the default party leader graphic from Party_gfx.amb
+	bool loadGraphics(AmberEngine *engine, uint16 playerGfxIndex = 1);
+};
 
 struct AmberGameDescription;
 
@@ -48,6 +85,21 @@ class AmberEngine : public Engine {
 private:
 	const ADGameDescription *_gameDescription;
 	Common::RandomSource _randomSource;
+
+
+	AmberMap _map; // the current map data
+	AmberTileset _tileset; // the graphics for the map
+	AmberPlayer _player;
+
+	int _cameraTileX;
+	int _cameraTileY;
+	bool _isAmberstar; // toggle for collision testing
+
+	bool initGame(); // loads core files like cursors, fonts, and ui
+	void initWorld(); // runs character creator and loads the starting map
+	void handleInput();
+	void renderFrame(); // draws the map, player, and ui to the screen
+
 protected:
 	// Engine APIs
 	Common::Error run() override;
@@ -56,6 +108,8 @@ public:
 	AmberCursor *_cursor;
 	AmberUI *_ui;
 	Graphics::Screen *_screen = nullptr;
+	AmberPerson *_party[6];
+
 public:
 	AmberEngine(OSystem *syst, const ADGameDescription *gameDesc);
 	~AmberEngine() override;

@@ -28,6 +28,26 @@
 
 namespace Amber {
 
+namespace UIConstants {
+// map viewport
+const int MAP_VIEW_X = 16;
+const int MAP_VIEW_Y = 49;
+const int MAP_VIEW_WIDTH = 176;  // 11 tiles * 16px
+const int MAP_VIEW_HEIGHT = 144; // 9 tiles * 16px
+
+// layout dimensions
+const int LAYOUT_X = 0;
+const int LAYOUT_Y = 37;
+const int LAYOUT_WIDTH = 320;
+const int LAYOUT_HEIGHT = 163;
+
+// movement pad grid starting position
+const int BUTTON_GRID_X = 208;
+const int BUTTON_GRID_Y = 143;
+const int BUTTON_WIDTH = 32;
+const int BUTTON_HEIGHT = 17;
+} // End of namespace UIConstants
+
 class AmberEngine;
 
 class AmberUI {
@@ -35,6 +55,15 @@ private:
 	Graphics::Surface *_frames[8];
 	Graphics::Surface *_btnFrameNormal;
 	Graphics::Surface *_btnFramePressed;
+	Graphics::Surface *_explorationLayout;
+
+	Graphics::Surface *_statusL;
+	Graphics::Surface *_statusM;
+	Graphics::Surface *_statusR;
+	Graphics::Surface *_statusTB;
+	Graphics::Surface *_emptyPortrait;
+
+	Graphics::Surface *_portraits[6];
 
 	enum FrameType {
 		FRAME_UPPER_LEFT,
@@ -59,7 +88,17 @@ public:
 	// draws the 3D boxes used for buttons and text inputs
 	void drawBox(Graphics::Screen *screen, Common::Rect area, bool sunken);
 	void drawButton(Graphics::Screen *screen, int x, int y, bool pressed = false);
-};
+
+	// load and draw the main game ui
+	bool loadExplorationLayout(AmberEngine *engine);
+	void drawExplorationLayout(Graphics::Screen *screen);
+
+	void drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine);
+	bool loadPartyPortraits(AmberEngine *engine);
+
+	void drawPortraitBackground(Graphics::Screen *screen, int x, int y);
+	void drawBar(Graphics::Screen *screen, int x, int y, int w, int current, int max, byte color, byte shadowColor);
+	};
 
 } // End of namespace Amber
 

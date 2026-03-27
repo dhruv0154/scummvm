@@ -169,7 +169,7 @@ bool AmberFont::load(const AmigaExecutable &exe) {
 	return true;
 }
 
-void AmberFont::drawString(Graphics::Screen *screen, const Common::String &text, int x, int y) {
+void AmberFont::drawString(Graphics::Screen *screen, const Common::String &text, int x, int y, uint8 color) {
 	if (!screen)
 		return;
 
@@ -215,7 +215,7 @@ void AmberFont::drawString(Graphics::Screen *screen, const Common::String &text,
 
 					for (int gx = 0; gx < glyph->w; ++gx) {
 						if (srcRow[gx] != 0) { // if it is a solid pixel
-							dstRow[gx] = 31;   // color 31 is white in the UI palette
+							dstRow[gx] = color;
 						}
 					}
 				}

@@ -9,6 +9,7 @@ MODULE_OBJS = \
 	font.o \
 	ui.o \
 	cursor.o \
+	amber_map.o \
 	character_creater.o \
 	metaengine.o
 

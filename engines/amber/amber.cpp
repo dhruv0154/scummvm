@@ -35,10 +35,51 @@
 #include "archive.h"
 #include "graphics/cursorman.h"
 #include "character_creator.h"
+#include "amber_map.h"
+#include "ambermoon_person.h"
 
 namespace Amber {
 
 AmberEngine *g_engine;
+
+bool AmberPlayer::loadGraphics(AmberEngine *engine, uint16 playerGfxIndex) {
+	AmberArchive archive;
+
+	if (!archive.open(Common::Path("Party_gfx.amb"))) {
+		warning("AmberPlayer: Party_gfx.amb not found");
+		return false;
+	}
+
+	Common::Path gfxFileId(Common::String::format("%d", playerGfxIndex));
+	Common::SeekableReadStream *stream = archive.createReadStreamForMember(gfxFileId);
+
+	// party graphics use 3 frames per walking direction
+	// Up = 0,1,2, Right = 3,4,5, Down = 6,7,8, Left = 9,10,11
+	// after frame 11, the file contains sitting and sleeping frames
+	int targetFrames[4] = {0, 3, 6, 9};
+	int currentFrame = 0;
+
+	for (int dir = 0; dir < 4; dir++) {
+		if (stream->eos())
+			break;
+
+		// move the stream to the exact start of the next directional animation
+		while (currentFrame < targetFrames[dir]) {
+			stream->skip(320);
+			currentFrame++;
+		}
+
+		// decode the frame for this direction
+		sprites[dir] = engine->decodePlanarGraphic(stream, 16, 32, 5, 0);
+
+		// the decode planar graphic function consumes 320 bytes (1 frame)
+		currentFrame++;
+	}
+
+	delete stream;
+	archive.close();
+	return true;
+}
 
 AmberEngine::AmberEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 	_gameDescription(gameDesc), _randomSource("Amber") {
@@ -46,6 +87,8 @@ AmberEngine::AmberEngine(OSystem *syst, const ADGameDescription *gameDesc) : Eng
 	_font = new AmberFont();
 	_cursor = new AmberCursor();
 	_ui = new AmberUI();
+	for (int i = 0; i < 6; ++i)
+		_party[i] = nullptr;
 }
 
 AmberEngine::~AmberEngine() {
@@ -53,6 +96,10 @@ AmberEngine::~AmberEngine() {
 	delete _font;
 	delete _cursor;
 	delete _ui;
+	for (int i = 0; i < 6; i++) {
+		if (_party[i])
+			delete _party[i];
+	}
 }
 
 uint32 AmberEngine::getFeatures() const {
@@ -76,20 +123,52 @@ Common::Error AmberEngine::run() {
 	if (saveSlot != -1)
 		(void)loadGameState(saveSlot);
 
-	// load the game exe file
+	initGame();
+	initWorld();
+
+	Graphics::FrameLimiter limiter(g_system, 60);
+
+	while (!shouldQuit()) {
+		handleInput();
+		renderFrame();
+		limiter.delayBeforeSwap();
+		_screen->update();
+		limiter.startFrame();
+	}
+
+	return Common::kNoError;
+}
+
+bool AmberEngine::initGame() {
+	// open the main executable file of the game
+	// this file contains the core code, but also holds ui graphics,
+	// cursors, and fonts packed inside its data chunks
 	Common::File cpuFile;
-	if (!cpuFile.open("AM2_CPU"))
-		error("Failed to open AM2_CPU");
+	if (!cpuFile.open("AM2_CPU")) {
+		warning("failed to open AM2_CPU");
+		return false;
+	}
 
+	// load the file into our amiga executable parser
+	// so we can read the individual memory blocks (hunks)
 	AmigaExecutable exe;
-	if (!exe.load(&cpuFile))
-		error("Failed to parse AM2_CPU");
+	if (!exe.load(&cpuFile)) {
+		warning("failed to parse AM2_CPU");
+		return false;
+	}
 
-	// load cursor & main color palette
+	// pass the parsed executable to our cursor class
+	// it finds the cursor graphics and the base ui palette
 	if (_cursor->load(exe, this)) {
+		// the ui palette is 32 colors, we set it at index 0,
+		// and we also make a copy of it at index 32 because later maps will load
+		// their palette in the slots 0-31 which will override our ui palette,
+		// so, we make a copy of it in empty slots to save it
 		g_system->getPaletteManager()->setPalette(_cursor->getUIPalette(), 0, 32);
+		g_system->getPaletteManager()->setPalette(_cursor->getUIPalette(), 32, 32);
 
-		CursorData *mousePointer = _cursor->getCursor(0); // sword cursor
+		// grab the main sword cursor (index 0) and tell scummvm to use it
+		CursorData *mousePointer = _cursor->getCursor(0);
 		if (mousePointer && mousePointer->surface) {
 			CursorMan.pushCursor(
 				mousePointer->surface->getPixels(), mousePointer->surface->w, mousePointer->surface->h,
@@ -99,17 +178,181 @@ Common::Error AmberEngine::run() {
 		}
 	}
 
-	// load UI borders and font
+	// pass the executable to our ui and font classes
+	// so they can extract the window borders, buttons, and text characters
 	_ui->load(exe, this);
 	_font->load(exe);
+
+	return true;
+}
+
+void AmberEngine::initWorld() {
+	// launch the character creator screen first
+	CharacterCreator cc(this);
+	cc.execute();
+
+	// slot 0: the leader created by the player in character creater
+	Common::String leaderName = cc.getSelectedName();
+	uint16 leaderPortrait = cc.getSelectedPortraitId();
+	_party[0] = new AmbermoonPerson(leaderName, leaderPortrait, 50, 0, false);
+
+	// slot 1: a female wizard for testing the ui
+	_party[1] = new AmbermoonPerson("WIZARD", 31, 20, 40, true);
+
+	// slot 2: a damaged warrior for testing the hp bars
+	_party[2] = new AmbermoonPerson("WARRIOR", 25, 60, 0, false);
+	_party[2]->_currentHP = 30;
+
+	// tell the ui to load the graphics for the portraits of the party members we just created
+	_ui->loadPartyPortraits(this);
 
 	_screen->fillRect(Common::Rect(0, 0, 320, 200), 0);
 	_screen->update();
 
-	CharacterCreator creator(this);
-	creator.execute();
+	// load map 258, which is the starting grandfarther house map for ambermoon
+	// if the map loads successfully, we also tell the tileset class to load
+	// the specific tiles that this map requires
+	if (_map.load(258)) {
+		_tileset.load(_map.header.tileset, this);
+	}
 
-	return Common::kNoError;
+	// open the palette archive to find the specific colors for this map
+	AmberArchive palArchive;
+	if (palArchive.open(Common::Path("Palettes.amb"))) {
+		Common::Path palFileId(Common::String::format("%d", _map.header.paletteIndex));
+		if (palArchive.hasFile(palFileId)) {
+			Common::SeekableReadStream *palStream = palArchive.createReadStreamForMember(palFileId);
+			if (palStream) {
+				// pass the file stream to our palette decoder to add the map colors
+				loadAmigaPalette(palStream);
+				delete palStream;
+			}
+		}
+		palArchive.close();
+	}
+
+	if (!_player.loadGraphics(this, 1))
+		warning("Failed to load player graphics. visuals may be missing.");
+
+	_player.mapX = 15;
+	_player.mapY = 15;
+	_player.facing = DIR_DOWN;
+	_cameraTileX = _player.mapX;
+	_cameraTileY = _player.mapY;
+
+	// load the graphical layout overlay that goes around the 2D map viewport
+	_ui->loadExplorationLayout(this);
+
+	// this flag can be toggled to test different collision rules later
+	_isAmberstar = false;
+}
+
+void AmberEngine::handleInput() {
+	Common::Event e;
+
+	while (g_system->getEventManager()->pollEvent(e)) {
+
+		if (e.type == Common::EVENT_KEYDOWN) {
+			int dx = 0;
+			int dy = 0;
+
+			// check which arrow key was pressed and update the player's facing direction
+			// also set the delta x (dx) or delta y (dy) to move 1 tile in that direction
+			if (e.kbd.keycode == Common::KEYCODE_UP) {
+				dy = -1;
+				_player.facing = DIR_UP;
+			} else if (e.kbd.keycode == Common::KEYCODE_DOWN) {
+				dy = 1;
+				_player.facing = DIR_DOWN;
+			} else if (e.kbd.keycode == Common::KEYCODE_LEFT) {
+				dx = -1;
+				_player.facing = DIR_LEFT;
+			} else if (e.kbd.keycode == Common::KEYCODE_RIGHT) {
+				dx = 1;
+				_player.facing = DIR_RIGHT;
+			}
+
+			// if dx or dy is not zero, it means the player actually tried to move
+			if (dx != 0 || dy != 0) {
+				// calculate the tile the player wants to step onto
+				int targetX = _player.mapX + dx;
+				int targetY = _player.mapY + dy;
+
+				// ask the map if this specific tile allows walking
+				// if it does, we update the player's actual position
+				if (_map.allowMovement(targetX, targetY, &_tileset, TRAVEL_WALK, _isAmberstar)) {
+					_player.mapX = targetX;
+					_player.mapY = targetY;
+
+					// lock the camera to follow the player new position
+					_cameraTileX = _player.mapX;
+					_cameraTileY = _player.mapY;
+				}
+			}
+		}
+	}
+}
+
+void AmberEngine::renderFrame() {
+	// the standard ambermoon 2D viewport is 11 tiles wide by 9 tiles high
+	int viewWidthTiles = 11;
+	int viewHeightTiles = 9;
+
+	// these are the exact screen coordinates where the top left corner of the map sits
+	int startX = UIConstants::MAP_VIEW_X;
+	int startY = UIConstants::MAP_VIEW_Y;
+
+	// draw the static user interface elements
+	_ui->drawExplorationLayout(_screen);
+	_ui->drawPortraitBar(_screen, this);
+
+	// render the map grid
+	// we loop through every visible row (y) and column (x) in the camera's view
+	for (int y = 0; y < viewHeightTiles; y++) {
+		for (int x = 0; x < viewWidthTiles; x++) {
+
+			// calculate the actual map coordinate for this specific screen tile
+			int mapX = _cameraTileX + x - (viewWidthTiles / 2);
+			int mapY = _cameraTileY + y - (viewHeightTiles / 2);
+
+			// calculate the exact pixel coordinate on the screen to draw this tile
+			int screenX = startX + x * 16;
+			int screenY = startY + y * 16;
+
+			// check if this coordinate is actually inside the map boundaries
+			if (mapX >= 0 && mapX < _map.header.width && mapY >= 0 && mapY < _map.header.height) {
+				AmberMapTile2D &tile = _map.tiles2D[mapY * _map.header.width + mapX];
+
+				// calculate the current animation tick to make basic animations work
+				uint32 currentTicks = g_system->getMillis() / 10;
+
+				// draw the floor graphic (background)
+				Graphics::Surface *backGfx = _tileset.getGraphic(tile.backTileIndex, currentTicks);
+				if (backGfx)
+					_screen->transBlitFrom(*backGfx, Common::Point(screenX, screenY), 0);
+
+				// draw the wall/furniture graphic (foreground)
+				Graphics::Surface *frontGfx = _tileset.getGraphic(tile.frontTileIndex, currentTicks);
+				if (frontGfx)
+					_screen->transBlitFrom(*frontGfx, Common::Point(screenX, screenY), 0);
+			} else {
+				// if we are looking outside the map, draw a black 16x16 square
+				_screen->fillRect(Common::Rect(screenX, screenY, screenX + 16, screenY + 16), 0);
+			}
+		}
+	}
+
+	// render the player character
+	// find the center of the map viewport
+	int playerScreenX = startX + (viewWidthTiles / 2) * 16;
+
+	// the player sprite is 32 pixels tall, but tiles are only 16 pixels tall
+	// shift the y position up by 16 pixels so the character's feet touch the ground
+	int playerScreenY = startY + (viewHeightTiles / 2) * 16 - 16;
+
+	Graphics::Surface *activeSprite = _player.sprites[_player.facing];
+	if (activeSprite)
+		_screen->transBlitFrom(*activeSprite, Common::Point(playerScreenX, playerScreenY), 0);
 }
 
 void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {

@@ -250,7 +250,25 @@ Common::SeekableReadStream *AmberArchive::createReadStreamForMember(const Common
 		}
 	}
 
-	// AMBR files have no encryption at all, AMPC files are purely LOB compressed 
+	// AMPC files are purely LOB compressed 
+	if (_containerType == 0x414D5043) {
+		uint32 magic = rawStream->readUint32BE();
+
+		if (magic == 0x014C4F42) {
+			uint32 lobHeader = rawStream->readUint32BE();
+			uint32 decodedSize = lobHeader & 0x00FFFFFF;
+
+			// skip the 4 bytes for compressed size
+			rawStream->readUint32BE();
+
+			Common::SeekableReadStream *decompressed = createLOBStream(rawStream, decodedSize);
+			delete rawStream;
+			return decompressed;
+		}
+		rawStream->seek(0);
+	}
+
+	// AMBR files have no encryption at all
 	return rawStream;
 }
 
