@@ -41,6 +41,7 @@
 #include "ui.h"
 #include "amber_person.h"
 #include "amber_map.h"
+#include "game_context.h"
 
 namespace Amber {
 
@@ -85,7 +86,7 @@ class AmberEngine : public Engine {
 private:
 	const ADGameDescription *_gameDescription;
 	Common::RandomSource _randomSource;
-
+	GameContext* _context;
 
 	AmberMap _map; // the current map data
 	AmberTileset _tileset; // the graphics for the map

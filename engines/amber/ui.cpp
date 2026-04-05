@@ -34,6 +34,8 @@ AmberUI::AmberUI() {
 		_portraits[i] = nullptr;
 	for (int i = 0; i < 9; ++i)
 		_buttonIcons[i] = nullptr;
+	for (int i = 0; i < 5; ++i)
+		_ccIcons[i] = nullptr;
 	_btnFrameNormal = nullptr;
 	_btnFramePressed = nullptr;
 	_explorationLayout = nullptr;
@@ -61,6 +63,12 @@ AmberUI::~AmberUI() {
 		if (_buttonIcons[i]) {
 			_buttonIcons[i]->free();
 			delete _buttonIcons[i];
+		}
+	}
+	for (int i = 0; i < 5; ++i) {
+		if (_ccIcons[i]) {
+			_ccIcons[i]->free();
+			delete _ccIcons[i];
 		}
 	}
 	if (_btnFrameNormal) {
@@ -93,91 +101,39 @@ AmberUI::~AmberUI() {
 	}
 }
 
-bool AmberUI::load(const AmigaExecutable &exe, AmberEngine *engine) {
-	// the UI graphics are in the very first data hunk
-	byte *hunk0 = exe.getDataHunk(0);
-	if (!hunk0)
-		return false;
+void AmberUI::setFrame(int index, Graphics::Surface *surface) {
+	if (index >= 0 && index < 8)
+		_frames[index] = surface;
+}
 
-	// custom ui colors for blue background behind portraits and
-	// for HP and SP bars
-	byte customColors[24 * 3]; // 24 colors (3 bytes for each)
+void AmberUI::setPortraitBars(Graphics::Surface *l, Graphics::Surface *m, Graphics::Surface *r, Graphics::Surface *tb) {
+	_statusL = l;
+	_statusM = m;
+	_statusR = r;
+	_statusTB = tb;
+}
 
-	// blue gradient for portraits
-	for (int i = 0; i < 16; i++) {
-		customColors[i * 3 + 0] = 0;      // R = 0x00
-		customColors[i * 3 + 1] = 17;     // G = 0x11
-		customColors[i * 3 + 2] = i * 17; // B increments by 0x11
-	}
+void AmberUI::setEmptyPortrait(Graphics::Surface *surface) {
+	_emptyPortrait = surface;
+}
 
-	// 216-217: HP bar
-	customColors[16 * 3 + 0] = 0;
-	customColors[16 * 3 + 1] = 50;
-	customColors[16 * 3 + 2] = 70;
-	customColors[17 * 3 + 0] = 0;
-	customColors[17 * 3 + 1] = 110;
-	customColors[17 * 3 + 2] = 130;
+void AmberUI::setButtonFrames(Graphics::Surface *normal, Graphics::Surface *pressed) {
+	_btnFrameNormal = normal;
+	_btnFramePressed = pressed;
+}
 
-	// 218-219: SP bar
-	customColors[18 * 3 + 0] = 30;
-	customColors[18 * 3 + 1] = 60;
-	customColors[18 * 3 + 2] = 10;
-	customColors[19 * 3 + 0] = 70;
-	customColors[19 * 3 + 1] = 120;
-	customColors[19 * 3 + 2] = 30;
+void AmberUI::setExplorationLayout(Graphics::Surface *layout) {
+	_explorationLayout = layout;
+}
 
-	// 220-221: text colors
-	customColors[20 * 3 + 0] = 255;
-	customColors[20 * 3 + 1] = 215;
-	customColors[20 * 3 + 2] = 0;
-	customColors[21 * 3 + 0] = 200;
-	customColors[21 * 3 + 1] = 200;
-	customColors[21 * 3 + 2] = 200;
+void AmberUI::setButtonIcon(int index, Graphics::Surface *icon) {
+	if (index >= 0 && index < 9)
+		_buttonIcons[index] = icon;
+}
 
-	g_system->getPaletteManager()->setPalette(customColors, 200, 24);
-
-	// skip 160 bytes of copper commands + 32 bytes of the disable mask
-	uint32 offset = 192;
-
-	// extract the 8 border frames
-	for (int i = 0; i < 8; i++) {
-		// 16x16, 3 bit depth, +24 palette offset for ui
-		_frames[i] = engine->decodePlanarGraphic(hunk0 + offset, 16, 16, 3, 24);
-		offset += 96; // advance 96 bytes to the next frame
-	}
-
-	uint32 topBarOffset = 6616; // jump forward to extract portrait bar borders
-
-	// LeftPortraitBorder (16x36, 3 planes) = 216 bytes
-	_statusL = engine->decodePlanarGraphic(hunk0 + topBarOffset, 16, 36, 3, 56);
-	topBarOffset += 216;
-
-	// Divider (16x36, 3 planes) = 216 bytes
-	_statusM = engine->decodePlanarGraphic(hunk0 + topBarOffset, 16, 36, 3, 56);
-	topBarOffset += 216;
-
-	// RightPortraitBorder (16x36, 3 planes) = 216 bytes
-	_statusR = engine->decodePlanarGraphic(hunk0 + topBarOffset, 16, 36, 3, 56);
-	topBarOffset += 216;
-
-	// SmallBorder1 & 2 (Combined into 32x1, 3 planes) = 12 bytes
-	_statusTB = engine->decodePlanarGraphic(hunk0 + topBarOffset, 32, 1, 3, 56);
-	topBarOffset += 12;
-
-	uint32 emptyFaceOffset = 11688;
-	_emptyPortrait = engine->decodePlanarGraphic(hunk0 + emptyFaceOffset, 32, 34, 3, 56);
-
-	// jump forward to extract button frames
-	uint32 buttonOffset = 10336;
-
-	// 32x17 pixels, 3 bit depth, +24 palette offset
-	_btnFrameNormal = engine->decodePlanarGraphic(hunk0 + buttonOffset, 32, 17, 3, 24);
-
-	// advance 204 bytes for the next frame
-	buttonOffset += 204;
-	_btnFramePressed = engine->decodePlanarGraphic(hunk0 + buttonOffset, 32, 17, 3, 24);
-
-	return true;
+void AmberUI::setCCButtonIcon(int index, Graphics::Surface *icon) {
+	if (index >= 0 && index < 5)
+		_ccIcons[index] = icon;
 }
 
 void AmberUI::drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine) {
@@ -352,69 +308,6 @@ void AmberUI::drawButton(Graphics::Screen *screen, int x, int y, bool pressed) {
 	Graphics::Surface *frame = pressed ? _btnFramePressed : _btnFrameNormal;
 	if (frame)
 		screen->transBlitFrom(*frame, Common::Point(x, y), 24);
-}
-
-bool AmberUI::loadExplorationLayout(AmberEngine *engine) {
-	AmberArchive archive;
-
-	// the main UI frames are stored in Layouts.amb
-	if (archive.open(Common::Path("Layouts.amb"))) {
-		Common::SeekableReadStream *stream = archive.createReadStreamForMember(Common::Path("1"));
-
-		if (stream) {
-			// 3-Bit planar, +24 plaetteOffset
-			_explorationLayout = engine->decodePlanarGraphic(stream, UIConstants::LAYOUT_WIDTH, UIConstants::LAYOUT_HEIGHT, 3, 24);
-			delete stream;
-		}
-		archive.close();
-	}
-
-	Common::File btnFile;
-	if (btnFile.open("Button_graphics")) {
-		Common::SeekableReadStream *activeStream = &btnFile;
-		Common::SeekableReadStream *decryptedStream = nullptr;
-		Common::SeekableReadStream *decompressedStream = nullptr;
-
-		// decrypt (JH)
-		uint32 header = activeStream->readUint32BE();
-		if ((header & 0xFFFF0000) == 0x4A480000) {
-			uint16 key = ((header >> 16) & 0xFFFF) ^ (header & 0xFFFF);
-			decryptedStream = createJHStream(activeStream, key, btnFile.size() - 4);
-			activeStream = decryptedStream;
-			header = activeStream->readUint32BE(); // read the next header from the decrypted data
-		}
-
-		// decompress (LOB)
-		if (header == 0x014C4F42) {
-			uint32 decodedSize = activeStream->readUint32BE() & 0x00FFFFFF;
-			activeStream->readUint32BE();
-			decompressedStream = createLOBStream(activeStream, decodedSize);
-			activeStream = decompressedStream;
-		}
-
-		// the icons are 32x13 pixels, 3-bit color, each is 156 bytes
-		// map our 9 grid buttons to their specific indices in the file:
-		// Up-Left (8), Up (9), Up-Right (10)
-		// Left (11), Wait (71), Right (12)
-		// Down-Left (13), [7] Down (14), [8] Down-Right (15)
-		int iconIndices[9] = {8, 9, 10, 11, 71, 12, 13, 14, 15};
-
-		for (int i = 0; i < 9; i++) {
-			activeStream->seek(iconIndices[i] * 156);
-			_buttonIcons[i] = engine->decodePlanarGraphic(activeStream, 32, 13, 3, 24);
-		}
-
-		if (decompressedStream)
-			delete decompressedStream;
-		if (decryptedStream)
-			delete decryptedStream;
-		btnFile.close();
-	} else {
-		warning("AmberUI: Failed to open Button_graphics!");
-	}
-
-	warning("AmberUI: Failed to load exploration layout from Layouts.amb!");
-	return false;
 }
 
 void AmberUI::drawExplorationLayout(Graphics::Screen *screen) {

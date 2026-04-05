@@ -39,14 +39,13 @@ private:
 	// store a copy of the game's mapping table here to translate ASCII to glyph index
 	byte _mappingTable[256];
 
-	// takes the 5 byte 1 bit planar array and creates a 6x6 pixel surface
-	Graphics::Surface *decodeGlyph(byte *glyphData);
-
 public:
 	AmberFont();
 	~AmberFont();
 
-	bool load(const AmigaExecutable &exe);
+	void setMappingTable(const byte *table);
+	void setGlyph(int index, Graphics::Surface *surface);
+
 	void drawString(Graphics::Screen *screen, const Common::String &text, int x, int y, uint8 color = 31);
 };
 

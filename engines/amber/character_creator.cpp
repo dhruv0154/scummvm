@@ -40,7 +40,6 @@ CharacterCreator::CharacterCreator(AmberEngine *engine) : _engine(engine) {
 	_isFemale = false;
 	_isFinished = false;
 	_portraitListIndex = 0;
-	_iconMale = _iconFemale = _iconLeft = _iconRight = _iconOk = nullptr;
 
 	// we calculate the center of the 320x200 screen once here
 	_winX = (320 - (16 * 16)) / 2;
@@ -56,79 +55,6 @@ CharacterCreator::CharacterCreator(AmberEngine *engine) : _engine(engine) {
 }
 
 CharacterCreator::~CharacterCreator() {
-	if (_iconMale) {
-		_iconMale->free();
-		delete _iconMale;
-	}
-	if (_iconFemale) {
-		_iconFemale->free();
-		delete _iconFemale;
-	}
-	if (_iconLeft) {
-		_iconLeft->free();
-		delete _iconLeft;
-	}
-	if (_iconRight) {
-		_iconRight->free();
-		delete _iconRight;
-	}
-	if (_iconOk) {
-		_iconOk->free();
-		delete _iconOk;
-	}
-}
-
-void CharacterCreator::loadAssets() {
-	Common::File btnFile;
-	if (btnFile.open("Button_graphics")) {
-		Common::SeekableReadStream *activeStream = &btnFile;
-		Common::SeekableReadStream *decryptedStream = nullptr;
-		Common::SeekableReadStream *decompressedStream = nullptr;
-
-		// decrypt (JH)
-		uint32 header = activeStream->readUint32BE();
-		if ((header & 0xFFFF0000) == 0x4A480000) {
-			uint16 key = ((header >> 16) & 0xFFFF) ^ (header & 0xFFFF);
-			decryptedStream = createJHStream(activeStream, key, btnFile.size() - 4);
-			activeStream = decryptedStream;
-			header = activeStream->readUint32BE(); // read the next header from the decrypted data
-		}
-
-		// decompress (LOB)
-		if (header == 0x014C4F42) {
-			uint32 decodedSize = activeStream->readUint32BE() & 0x00FFFFFF;
-			activeStream->readUint32BE();
-			decompressedStream = createLOBStream(activeStream, decodedSize);
-			activeStream = decompressedStream;
-		} else {
-			// if it was not LOB compressed, we need to rewind the stream back 4 bytes
-			// because we consumed the header but did not use it
-			activeStream->seek(0);
-		}
-
-		// each button sprite is exactly 156 bytes long
-		// 32 pixels wide, 13 pixels tall and 3 bit color, each plane is 52 bytes long
-		activeStream->seek(76 * 156);
-		_iconMale = _engine->decodePlanarGraphic(activeStream, 32, 13, 3, 24);
-
-		activeStream->seek(77 * 156);
-		_iconFemale = _engine->decodePlanarGraphic(activeStream, 32, 13, 3, 24);
-
-		activeStream->seek(11 * 156);
-		_iconLeft = _engine->decodePlanarGraphic(activeStream, 32, 13, 3, 24);
-
-		activeStream->seek(12 * 156);
-		_iconRight = _engine->decodePlanarGraphic(activeStream, 32, 13, 3, 24);
-
-		activeStream->seek(28 * 156);
-		_iconOk = _engine->decodePlanarGraphic(activeStream, 32, 13, 3, 24);
-
-		if (decompressedStream)
-			delete decompressedStream;
-		if (decryptedStream)
-			delete decryptedStream;
-		btnFile.close();
-	}
 }
 
 void CharacterCreator::drawPortrait() {
@@ -222,8 +148,7 @@ void CharacterCreator::handleEvent(const Common::Event &e, const Common::Point &
 			if (_playerName.size() > 0) {
 				_playerName.deleteChar(_playerName.size() - 1); // delete the last character
 			}
-		}
-		else if (_playerName.size() < maxNameLen) {
+		} else if (_playerName.size() < maxNameLen) {
 			char c = (char)e.kbd.ascii;
 
 			// only allow standard alphabet, numbers, and spaces
@@ -265,25 +190,25 @@ void CharacterCreator::draw() {
 	// this makes the icon physically sink into the screen
 
 	int yOffset = 0;
-	if (_iconMale) {
+	if (_engine->_ui->_ccIcons[0]) {
 		yOffset = (_pressedButtonId == 0) ? 2 : 0;
-		screen->transBlitFrom(*_iconMale, Common::Point(_winX + 16, _winY + 28 + yOffset), 24);
+		screen->transBlitFrom(*_engine->_ui->_ccIcons[0], Common::Point(_winX + 16, _winY + 28 + yOffset), 24);
 	}
-	if (_iconFemale) {
+	if (_engine->_ui->_ccIcons[1]) {
 		yOffset = (_pressedButtonId == 1) ? 2 : 0;
-		screen->transBlitFrom(*_iconFemale, Common::Point(_winX + 16, _winY + 47 + yOffset), 24);
+		screen->transBlitFrom(*_engine->_ui->_ccIcons[1], Common::Point(_winX + 16, _winY + 47 + yOffset), 24);
 	}
-	if (_iconLeft) {
+	if (_engine->_ui->_ccIcons[2]) {
 		yOffset = (_pressedButtonId == 2) ? 2 : 0;
-		screen->transBlitFrom(*_iconLeft, Common::Point(_winX + 72, _winY + 37 + yOffset), 24);
+		screen->transBlitFrom(*_engine->_ui->_ccIcons[2], Common::Point(_winX + 72, _winY + 37 + yOffset), 24);
 	}
-	if (_iconRight) {
+	if (_engine->_ui->_ccIcons[3]) {
 		yOffset = (_pressedButtonId == 3) ? 2 : 0;
-		screen->transBlitFrom(*_iconRight, Common::Point(_winX + 152, _winY + 37 + yOffset), 24);
+		screen->transBlitFrom(*_engine->_ui->_ccIcons[3], Common::Point(_winX + 152, _winY + 37 + yOffset), 24);
 	}
-	if (_iconOk) {
+	if (_engine->_ui->_ccIcons[4]) {
 		yOffset = (_pressedButtonId == 4) ? 2 : 0;
-		screen->transBlitFrom(*_iconOk, Common::Point(_winX + 208, _winY + 65 + yOffset), 24);
+		screen->transBlitFrom(*_engine->_ui->_ccIcons[4], Common::Point(_winX + 208, _winY + 65 + yOffset), 24);
 	}
 
 	_engine->_font->drawString(screen, "CREATE YOUR CHARACTER :", _winX + 44, _winY + 16);
@@ -302,7 +227,6 @@ void CharacterCreator::draw() {
 }
 
 void CharacterCreator::execute() {
-	loadAssets();
 	Common::Event e;
 	Graphics::FrameLimiter limiter(g_system, 60);
 

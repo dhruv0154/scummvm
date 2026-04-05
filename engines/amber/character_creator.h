@@ -62,19 +62,10 @@ private:
 	int _winX;
 	int _winY;
 
-	Graphics::Surface *_iconMale;
-	Graphics::Surface *_iconFemale;
-	Graphics::Surface *_iconLeft;
-	Graphics::Surface *_iconRight;
-	Graphics::Surface *_iconOk;
-
 	UIHitbox _buttons[5];
 
 	static const int _malePortraitIds[4];
 	static const int _femalePortraitIds[4];
-
-	// extracts the 5 button icons from Button_graphics into our _icon variables
-	void loadAssets();
 
 	// processes a single mouse or keyboard event
 	void handleEvent(const Common::Event &e, const Common::Point &mousePos);

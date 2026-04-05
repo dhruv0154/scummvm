@@ -81,8 +81,15 @@ public:
 	~AmberUI();
 
 	Graphics::Surface *_buttonIcons[9];
+	Graphics::Surface *_ccIcons[5]; // 0:Male, 1:Female, 2:Left, 3:Right, 4:Ok
 
-	bool load(const AmigaExecutable &exe, AmberEngine *engine);
+	void setFrame(int index, Graphics::Surface *surface);
+	void setPortraitBars(Graphics::Surface *l, Graphics::Surface *m, Graphics::Surface *r, Graphics::Surface *tb);
+	void setEmptyPortrait(Graphics::Surface *surface);
+	void setButtonFrames(Graphics::Surface *normal, Graphics::Surface *pressed);
+	void setExplorationLayout(Graphics::Surface *layout);
+	void setButtonIcon(int index, Graphics::Surface *icon);
+	void setCCButtonIcon(int index, Graphics::Surface *icon);
 
 	// draws window with the stone borders and colored background
 	void drawWindow(Graphics::Screen *screen, int x, int y, int widthTiles, int heightTiles);
@@ -91,8 +98,6 @@ public:
 	void drawBox(Graphics::Screen *screen, Common::Rect area, bool sunken);
 	void drawButton(Graphics::Screen *screen, int x, int y, bool pressed = false);
 
-	// load and draw the main game ui
-	bool loadExplorationLayout(AmberEngine *engine);
 	void drawExplorationLayout(Graphics::Screen *screen);
 
 	void drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine);
@@ -100,7 +105,7 @@ public:
 
 	void drawPortraitBackground(Graphics::Screen *screen, int x, int y);
 	void drawBar(Graphics::Screen *screen, int x, int y, int w, int current, int max, byte color, byte shadowColor);
-	};
+};
 
 } // End of namespace Amber
 

@@ -37,6 +37,7 @@
 #include "character_creator.h"
 #include "amber_map.h"
 #include "ambermoon_person.h"
+#include "asset_loader.h"
 
 namespace Amber {
 
@@ -89,6 +90,11 @@ AmberEngine::AmberEngine(OSystem *syst, const ADGameDescription *gameDesc) : Eng
 	_ui = new AmberUI();
 	for (int i = 0; i < 6; ++i)
 		_party[i] = nullptr;
+	if (getGameId() == "ambermoon") {
+		_context = new AmbermoonContext();
+	} else {
+		_context = new AmberstarContext();
+	}
 }
 
 AmberEngine::~AmberEngine() {
@@ -100,6 +106,7 @@ AmberEngine::~AmberEngine() {
 		if (_party[i])
 			delete _party[i];
 	}
+	delete _context;
 }
 
 uint32 AmberEngine::getFeatures() const {
@@ -140,48 +147,41 @@ Common::Error AmberEngine::run() {
 }
 
 bool AmberEngine::initGame() {
-	// open the main executable file of the game
-	// this file contains the core code, but also holds ui graphics,
-	// cursors, and fonts packed inside its data chunks
-	Common::File cpuFile;
-	if (!cpuFile.open("AM2_CPU")) {
-		warning("failed to open AM2_CPU");
+	AssetLoader *loader = nullptr;
+
+	if (_context->getGameType() == kGameTypeAmberstar) {
+		loader = new AmberstarAssetLoader();
+	} else {
+		loader = new AmbermoonAssetLoader();
+	}
+
+	if (!loader->loadCursor(this))
 		return false;
-	}
-
-	// load the file into our amiga executable parser
-	// so we can read the individual memory blocks (hunks)
-	AmigaExecutable exe;
-	if (!exe.load(&cpuFile)) {
-		warning("failed to parse AM2_CPU");
+	if (!loader->loadUI(this))
 		return false;
+	if (!loader->loadFont(this))
+		return false;
+	if (!loader->loadButtons(this))
+		return false;
+
+	delete loader;
+
+	// the ui palette is 32 colors, we set it at index 0,
+	// and we also make a copy of it at index 32 because later maps will load
+	// their palette in the slots 0-31 which will override our ui palette,
+	// so, we make a copy of it in empty slots to save it
+	g_system->getPaletteManager()->setPalette(_cursor->getUIPalette(), 0, 32);
+	g_system->getPaletteManager()->setPalette(_cursor->getUIPalette(), 32, 32);
+
+	// grab the main sword cursor (index 0) and tell scummvm to use it
+	CursorData *mousePointer = _cursor->getCursor(0);
+	if (mousePointer && mousePointer->surface) {
+		CursorMan.pushCursor(
+			mousePointer->surface->getPixels(), mousePointer->surface->w, mousePointer->surface->h,
+			mousePointer->hotspotX, mousePointer->hotspotY,
+			24, false, &mousePointer->surface->format);
+		CursorMan.showMouse(true);
 	}
-
-	// pass the parsed executable to our cursor class
-	// it finds the cursor graphics and the base ui palette
-	if (_cursor->load(exe, this)) {
-		// the ui palette is 32 colors, we set it at index 0,
-		// and we also make a copy of it at index 32 because later maps will load
-		// their palette in the slots 0-31 which will override our ui palette,
-		// so, we make a copy of it in empty slots to save it
-		g_system->getPaletteManager()->setPalette(_cursor->getUIPalette(), 0, 32);
-		g_system->getPaletteManager()->setPalette(_cursor->getUIPalette(), 32, 32);
-
-		// grab the main sword cursor (index 0) and tell scummvm to use it
-		CursorData *mousePointer = _cursor->getCursor(0);
-		if (mousePointer && mousePointer->surface) {
-			CursorMan.pushCursor(
-				mousePointer->surface->getPixels(), mousePointer->surface->w, mousePointer->surface->h,
-				mousePointer->hotspotX, mousePointer->hotspotY,
-				24, false, &mousePointer->surface->format);
-			CursorMan.showMouse(true);
-		}
-	}
-
-	// pass the executable to our ui and font classes
-	// so they can extract the window borders, buttons, and text characters
-	_ui->load(exe, this);
-	_font->load(exe);
 
 	return true;
 }
@@ -239,9 +239,6 @@ void AmberEngine::initWorld() {
 	_player.facing = DIR_DOWN;
 	_cameraTileX = _player.mapX;
 	_cameraTileY = _player.mapY;
-
-	// load the graphical layout overlay that goes around the 2D map viewport
-	_ui->loadExplorationLayout(this);
 
 	// this flag can be toggled to test different collision rules later
 	_isAmberstar = false;

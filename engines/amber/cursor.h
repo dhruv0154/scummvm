@@ -59,7 +59,8 @@ public:
 	AmberCursor();
 	~AmberCursor();
 
-	bool load(const AmigaExecutable &exe, AmberEngine *engine);
+	void setCursor(int index, Graphics::Surface *surface, int16 hx, int16 hy);
+	void setUIPalette(const byte *palette);
 
 	CursorData *getCursor(int index);
 

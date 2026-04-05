@@ -11,6 +11,7 @@ MODULE_OBJS = \
 	cursor.o \
 	amber_map.o \
 	character_creater.o \
+	asset_loader.o \
 	metaengine.o
 
 # This module can be built as a plugin

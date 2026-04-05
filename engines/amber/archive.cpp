@@ -55,6 +55,26 @@ bool AmberArchive::open(const Common::Path &filename) {
 	// read the 4 byte magic number ('AMNP', 'AMNC',..)
 	_containerType = _file->readUint32BE();
 
+	// handle raw LOB files directly
+	if (_containerType == 0x014C4F42) { // 01LOB
+		uint8 constant6 = _file->readByte();
+		if (constant6 != 6) {
+			warning("AmberArchive::open - Invalid raw LOB header in %s", filename.toString().c_str());
+			_file->close();
+			return false;
+		}
+		uint32 rawSize = _file->readUint32BE() & 0x00FFFFFF;
+
+		FileEntry entry;
+		entry.id = 1;
+		entry.offset = 0; // for raw LOB, the whole file is the member
+		entry.size = _file->size();
+
+		// store it using the filename itself as the key since it's a single file
+		_entries[filename.toString()] = entry;
+		return true;
+	}
+
 	// verify it is a known Ambermoon container format
 	if (_containerType != 0x414D4E43 && // AMNC
 		_containerType != 0x414D4E50 && // AMNP
@@ -179,6 +199,16 @@ Common::SeekableReadStream *AmberArchive::createReadStreamForMember(const Common
 
 	if (!rawStream)
 		return nullptr;
+
+	// raw LOB compressed files
+	if (_containerType == 0x014C4F42) {
+		rawStream->seek(5); // skip the header and constant 6
+		uint32 decodedSize = rawStream->readUint32BE() & 0x00FFFFFF;
+
+		Common::SeekableReadStream *decompressed = createLOBStream(rawStream, decodedSize);
+		delete rawStream;
+		return decompressed;
+	}
 
 	// AMNC files are 100% encrypted, we cannot read a single
 	// byte (not even the LOB header) until we decrypt the entire data
