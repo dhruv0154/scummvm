@@ -59,7 +59,26 @@ public:
 };
 
 class AmberstarAssetLoader : public AssetLoader {
+private:
+	// caching for AMBERDEV.UDO so we only decompress it once
+	byte *_devData = nullptr;
+	uint32 _devDataSize = 0;
+	bool _devLoaded = false;
+
+	bool ensureDevDataLoaded();
+
+	// helpers for amberstar's specific palette formats
+	void decodeCompactPalette(Common::SeekableReadStream *stream, byte *paletteOut);
+	void decodeWidePalette(Common::SeekableReadStream *stream, byte *paletteOut);
+
+	// helper to load the hardcoded UI palette
+	void loadUIPalette(AmberEngine *engine);
+
+	// helper to decode 8x5 1-bit planar fonts
+	Graphics::Surface *decodeAmberstarGlyph(byte *glyphData);
+
 public:
+	~AmberstarAssetLoader() override;
 	bool loadCursor(AmberEngine *engine) override;
 	bool loadFont(AmberEngine *engine) override;
 	bool loadUI(AmberEngine *engine) override;

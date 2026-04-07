@@ -187,6 +187,11 @@ bool AmberEngine::initGame() {
 }
 
 void AmberEngine::initWorld() {
+	if (_context->getGameType() == kGameTypeAmberstar) {
+		initAmberstarWorld();
+		return;
+	}
+
 	// launch the character creator screen first
 	CharacterCreator cc(this);
 	cc.execute();
@@ -242,6 +247,13 @@ void AmberEngine::initWorld() {
 
 	// this flag can be toggled to test different collision rules later
 	_isAmberstar = false;
+}
+
+void AmberEngine::initAmberstarWorld() {
+	_isAmberstar = true;
+	_player.facing = DIR_DOWN;
+	_cameraTileX = 0;
+	_cameraTileY = 0;
 }
 
 void AmberEngine::handleInput() {
@@ -350,6 +362,10 @@ void AmberEngine::handleInput() {
 }
 
 void AmberEngine::renderFrame() {
+	if (_context->getGameType() == kGameTypeAmberstar) {
+		renderAmberstarFrame();
+		return;
+	}
 	// the standard ambermoon 2D viewport is 11 tiles wide by 9 tiles high
 	int viewWidthTiles = 11;
 	int viewHeightTiles = 9;
@@ -428,6 +444,10 @@ void AmberEngine::renderFrame() {
 	Graphics::Surface *activeSprite = _player.sprites[_player.facing];
 	if (activeSprite)
 		_screen->transBlitFrom(*activeSprite, Common::Point(playerScreenX, playerScreenY), 0);
+}
+
+void AmberEngine::renderAmberstarFrame() {
+	_font->drawString(_screen, "Hello Amberstar", 10, 10, 15);
 }
 
 void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {

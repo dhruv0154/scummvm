@@ -25,7 +25,9 @@
 #include "amber/decoders.h"
 #include "common/debug.h"
 #include "common/file.h"
+#include "common/memstream.h"
 #include "graphics/paletteman.h"
+
 
 namespace Amber {
 
@@ -472,10 +474,191 @@ bool AmbermoonAssetLoader::loadButtons(AmberEngine *engine) {
 
 	return true;
 }
+AmberstarAssetLoader::~AmberstarAssetLoader() {
+	if (_devData) {
+		free(_devData);
+		_devData = nullptr;
+	}
+}
 
-bool AmberstarAssetLoader::loadCursor(AmberEngine *engine) { return true; }
-bool AmberstarAssetLoader::loadFont(AmberEngine *engine) { return true; }
-bool AmberstarAssetLoader::loadUI(AmberEngine *engine) { return true; }
+bool AmberstarAssetLoader::ensureDevDataLoaded() {
+	if (_devLoaded)
+		return true;
+
+	AmberArchive devArchive;
+	// AMBERDEV.UDO is a raw LOB file
+	if (!devArchive.open(Common::Path("AMBERDEV.UDO"))) {
+		warning("AmberstarAssetLoader: Failed to open AMBERDEV.UDO");
+		return false;
+	}
+
+	Common::SeekableReadStream *stream = devArchive.createReadStreamForMember(Common::Path("AMBERDEV.UDO"));
+	if (!stream) {
+		warning("AmberstarAssetLoader: Failed to decompress AMBERDEV.UDO");
+		devArchive.close();
+		return false;
+	}
+
+	_devDataSize = stream->size();
+	_devData = (byte *)malloc(_devDataSize);
+	stream->read(_devData, _devDataSize);
+
+	delete stream;
+	devArchive.close();
+
+	_devLoaded = true;
+	return true;
+}
+
+void AmberstarAssetLoader::decodeCompactPalette(Common::SeekableReadStream *stream, byte *paletteOut) {
+	// compact palettes are exactly 16 colors, 2 bytes per color (no header)
+	for (int i = 0; i < 16; i++) {
+		uint8 b0 = stream->readByte();
+		uint8 b1 = stream->readByte();
+
+		// extract 3-bit colors from the nibbles
+		uint8 r = b0 & 0x07;
+		uint8 g = (b1 & 0x70) >> 4;
+		uint8 b = b1 & 0x07;
+
+		// map 0-7 range to 0-255 range
+		// if 0 stay 0 otherwise, multiply by 32 and add 16 for brightness adjustment
+		paletteOut[i * 3 + 0] = (r == 0) ? 0 : (r * 32) + 16;
+		paletteOut[i * 3 + 1] = (g == 0) ? 0 : (g * 32) + 16;
+		paletteOut[i * 3 + 2] = (b == 0) ? 0 : (b * 32) + 16;
+	}
+}
+
+void AmberstarAssetLoader::decodeWidePalette(Common::SeekableReadStream *stream, byte *paletteOut) {
+	// wide palettes start with a 2-byte header indicating the number of colors
+	uint16 numColors = stream->readUint16BE();
+
+	// loop through the specified number of colors (usually 16)
+	for (int i = 0; i < numColors; i++) {
+		stream->readByte(); // alpha channel (unused in amberstar, always 0)
+		uint8 r = stream->readByte();
+		uint8 g = stream->readByte();
+		uint8 b = stream->readByte();
+
+		// map 0-7 range to 0-255 range
+		// if 0 stay 0 otherwise, multiply by 32 and add 16 for brightness adjustment
+		paletteOut[i * 3 + 0] = (r == 0) ? 0 : (r * 32) + 16;
+		paletteOut[i * 3 + 1] = (g == 0) ? 0 : (g * 32) + 16;
+		paletteOut[i * 3 + 2] = (b == 0) ? 0 : (b * 32) + 16;
+	}
+}
+
+void AmberstarAssetLoader::loadUIPalette(AmberEngine *engine) {
+	// hardcoded 32-byte compact UI palette
+	// this represents exactly 16 colors (2 bytes per color)
+	const byte hardcodedPalette[] = {
+		0x00, 0x00, 0x07, 0x50, 0x03, 0x33, 0x02, 0x22,
+		0x01, 0x11, 0x07, 0x42, 0x06, 0x31, 0x02, 0x00,
+		0x05, 0x66, 0x03, 0x45, 0x07, 0x54, 0x06, 0x43,
+		0x05, 0x32, 0x04, 0x21, 0x03, 0x10, 0x07, 0x65};
+
+	Common::MemoryReadStream paletteStream(hardcodedPalette, sizeof(hardcodedPalette));
+
+	// create an array for the decoded 8-bit RGB values (16 colors * 3 channels = 48 bytes)
+	byte uiPalette[16 * 3];
+
+	decodeCompactPalette(&paletteStream, uiPalette);
+	engine->_cursor->setUIPalette(uiPalette);
+}
+
+Graphics::Surface *AmberstarAssetLoader::decodeAmberstarGlyph(byte *glyphData) {
+	Graphics::Surface *surface = new Graphics::Surface();
+
+	// amberstar glyphs are exactly 8 pixels wide and 5 pixels tall (1 bit per pixel)
+	// we create an 8x6 canvas, leaving the bottom row empty
+	// so the text has vertical line spacing
+	surface->create(8, 6, Graphics::PixelFormat::createFormatCLUT8());
+
+	for (int y = 0; y < 6; y++) {
+		byte *row = (byte *)surface->getBasePtr(0, y);
+
+		// the 6th row (index 5) is spacing, fill it with 0 (transparent)
+		if (y == 5) {
+			for (int x = 0; x < 8; ++x) {
+				row[x] = 0;
+			}
+			continue;
+		}
+
+		// read the single byte that represents this entire row of 8 pixels
+		byte line = glyphData[y];
+
+		for (int x = 0; x < 8; ++x) {
+			// check each bit from left (MSB) to right (LSB).
+			// If the bit is 1, draw color 15 (white text)
+			// If the bit is 0, draw color 0 (transparent)
+			if (line & (1 << (7 - x))) {
+				row[x] = 15;
+			} else {
+				row[x] = 0;
+			}
+		}
+	}
+	return surface;
+}
+
+bool AmberstarAssetLoader::loadCursor(AmberEngine *engine) {
+	return true;
+}
+bool AmberstarAssetLoader::loadFont(AmberEngine *engine) {
+	if (!ensureDevDataLoaded())
+		return false;
+
+	// the exact 16-byte signature of the Text_conversion_tab from the asm
+	const byte fontSignature[] = {
+		0x3A, 0x24, 0x23, 0x2C, 0xFF, 0x2A, 0xFF, 0x22,
+		0x28, 0x29, 0x26, 0x2E, 0x20, 0x2D, 0x21, 0x2B};
+
+	uint32 fontOffset = 0;
+	bool found = false;
+
+	// scan the LOB decompressed data of AMBERDEV.UDO for the signature
+	for (uint32 i = 0; i < _devDataSize - sizeof(fontSignature); i++) {
+		bool match = true;
+		for (uint32 j = 0; j < sizeof(fontSignature); j++) {
+			if (_devData[i + j] != fontSignature[j]) {
+				match = false;
+				break;
+			}
+		}
+
+		if (match) {
+			fontOffset = i;
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		warning("AmberstarAssetLoader: Could not find font mapping signature in AMBERDEV.UDO!");
+		return false;
+	}
+
+	// read the text conversion table (224 bytes)
+	engine->_font->setMappingTable(_devData + fontOffset);
+
+	// skip the 224-byte text mapping and the 224-byte rune mapping to reach the pixels
+	uint32 glyphDataOffset = fontOffset + 224 + 224;
+
+	// decode the glyphs
+	// there are 89 glyphs in amberstar (calculated from Pyrdacor's 445 byte total)
+	for (int i = 0; i < 89; i++) {
+		// calculate the exact memory address for this specific letter
+		byte *currentGlyphData = _devData + glyphDataOffset + (i * 5);
+
+		// decode it using our 1-bit planar glyph decoder and push it to the engine
+		Graphics::Surface *glyphSurface = decodeAmberstarGlyph(currentGlyphData);
+		engine->_font->setGlyph(i, glyphSurface);
+	}
+
+	return true;
+}
+bool AmberstarAssetLoader::loadUI(AmberEngine *engine) { loadUIPalette(engine); return true; }
 bool AmberstarAssetLoader::loadButtons(AmberEngine *engine) { return true; }
 
 } // End of namespace Amber

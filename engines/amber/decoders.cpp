@@ -22,6 +22,7 @@
 #include "decoders.h"
 #include "common/memstream.h"
 #include "common/debug.h"
+#include "common/textconsole.h"
 
 namespace Amber {
 
@@ -104,6 +105,11 @@ Common::SeekableReadStream *createLOBStream(Common::SeekableReadStream *stream, 
 
 				// calculate where in our history to look
 				uint32 matchIndex = decodeIndex - matchOffset;
+
+				if (matchOffset > decodeIndex) {
+					warning("LOB Decompression error: matchOffset out of bounds!");
+					break;
+				}
 
 				// copy the old letters forward, one by one, until we hit the length
 				while (matchLength-- != 0 && decodeIndex < decodedSize)

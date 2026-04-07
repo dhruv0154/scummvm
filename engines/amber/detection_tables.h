@@ -22,7 +22,8 @@
 namespace Amber {
 
 const PlainGameDescriptor amberGames[] = {
-	{ "amber", "Amber" },
+	{ "ambermoon", "Ambermoon" },
+	{ "amberstar", "Amberstar" },
 	{ 0, 0 }
 };
 
@@ -36,6 +37,14 @@ const ADGameDescription gameDescriptions[] = {
 		ADGF_UNSTABLE,
 		GUIO1(GUIO_NONE)
 	},
+
+	{"amberstar",
+	 nullptr,
+	 AD_ENTRY1s("AMBERDEV.UDO", "3b2a56173aa5bfecbff85ca83270be86", 193554),
+	 Common::EN_ANY,
+	 Common::kPlatformAmiga,
+	 ADGF_UNSTABLE,
+	 GUIO1(GUIO_NONE)},
 
 	AD_TABLE_END_MARKER
 };

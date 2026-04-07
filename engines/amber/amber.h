@@ -98,7 +98,9 @@ private:
 
 	bool initGame(); // loads core files like cursors, fonts, and ui
 	void initWorld(); // runs character creator and loads the starting map
+	void initAmberstarWorld();
 	void handleInput();
+	void renderAmberstarFrame();
 	void renderFrame(); // draws the map, player, and ui to the screen
 
 protected:
