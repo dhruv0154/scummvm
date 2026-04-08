@@ -474,6 +474,31 @@ bool AmbermoonAssetLoader::loadButtons(AmberEngine *engine) {
 
 	return true;
 }
+
+bool AmbermoonAssetLoader::loadPartyPortraits(AmberEngine *engine) {
+	AmberArchive portraitArchive;
+	if (!portraitArchive.open(Common::Path("Portraits.amb"))) {
+		warning("AmberUI: Portraits.amb not found");
+		return false;
+	}
+
+	for (int i = 0; i < 6; i++) {
+		if (engine->_party[i] != nullptr) { // If a character exists in this slot
+			Common::String idStr = Common::String::format("%d", engine->_party[i]->_portraitId);
+			Common::SeekableReadStream *portraitStream = portraitArchive.createReadStreamForMember(Common::Path(idStr));
+
+			if (portraitStream) {
+				Graphics::Surface *surf = engine->decodePlanarGraphic(portraitStream, 32, 34, 5, 32);
+				engine->_ui->setPortrait(i, surf);
+				delete portraitStream;
+			}
+		}
+	}
+
+	portraitArchive.close();
+	return true;
+}
+
 AmberstarAssetLoader::~AmberstarAssetLoader() {
 	if (_devData) {
 		free(_devData);
@@ -660,5 +685,51 @@ bool AmberstarAssetLoader::loadFont(AmberEngine *engine) {
 }
 bool AmberstarAssetLoader::loadUI(AmberEngine *engine) { loadUIPalette(engine); return true; }
 bool AmberstarAssetLoader::loadButtons(AmberEngine *engine) { return true; }
+
+bool AmberstarAssetLoader::loadPartyPortraits(AmberEngine *engine) {
+	AmberArchive charArchive;
+
+	// CHARDATA.AMB is an uncompressed AMBR archive
+	if (!charArchive.open(Common::Path("CHARDATA.AMB"))) {
+		warning("AmberstarAssetLoader: CHARDATA.AMB not found!");
+		return false;
+	}
+
+	for (int i = 0; i < 6; i++) {
+		if (engine->_party[i] != nullptr) {
+			Common::String idStr = Common::String::format("%d", engine->_party[i]->_portraitId);
+			Common::SeekableReadStream *charStream = charArchive.createReadStreamForMember(Common::Path(idStr));
+
+			if (charStream) {
+				// CHARDATA.AMB portraits start at 0x06AA (1706)
+				charStream->seek(0x06AA);
+
+				// Amberstar CHARDATA portraits DO have a 6-byte header
+				uint16 width_m1 = charStream->readUint16BE();
+				uint16 height_m1 = charStream->readUint16BE();
+				uint16 numBitplanes = charStream->readUint16BE();
+
+				// If width is 0, the character has no portrait
+				if (width_m1 == 0 && height_m1 == 0) {
+					delete charStream;
+					continue;
+				}
+
+				uint16 actualWidth = width_m1 + 1;
+				uint16 actualHeight = height_m1 + 1;
+
+				// Palette offset is 0 (uses the UI palette we loaded earlier)
+				Graphics::Surface *surf = engine->decodePlanarGraphic(charStream, actualWidth, actualHeight, numBitplanes, 0, true);
+
+				engine->_ui->setPortrait(i, surf);
+
+				delete charStream;
+			}
+		}
+	}
+
+	charArchive.close();
+	return true;
+}
 
 } // End of namespace Amber

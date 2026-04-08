@@ -38,6 +38,7 @@ public:
 	virtual bool loadFont(AmberEngine *engine) = 0;
 	virtual bool loadUI(AmberEngine *engine) = 0;
 	virtual bool loadButtons(AmberEngine *engine) = 0;
+	virtual bool loadPartyPortraits(AmberEngine *engine) = 0;
 };
 
 class AmbermoonAssetLoader : public AssetLoader {
@@ -56,6 +57,7 @@ public:
 	bool loadFont(AmberEngine *engine) override;
 	bool loadUI(AmberEngine *engine) override;
 	bool loadButtons(AmberEngine *engine) override;
+	bool loadPartyPortraits(AmberEngine *engine) override;
 };
 
 class AmberstarAssetLoader : public AssetLoader {
@@ -83,6 +85,7 @@ public:
 	bool loadFont(AmberEngine *engine) override;
 	bool loadUI(AmberEngine *engine) override;
 	bool loadButtons(AmberEngine *engine) override;
+	bool loadPartyPortraits(AmberEngine *engine) override;
 };
 
 } // End of namespace Amber

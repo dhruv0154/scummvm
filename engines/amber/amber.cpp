@@ -208,8 +208,8 @@ void AmberEngine::initWorld() {
 	_party[2] = new AmbermoonPerson("WARRIOR", 25, 60, 0, false);
 	_party[2]->_currentHP = 30;
 
-	// tell the ui to load the graphics for the portraits of the party members we just created
-	_ui->loadPartyPortraits(this);
+	AmbermoonAssetLoader loader;
+	loader.loadPartyPortraits(this);
 
 	_screen->fillRect(Common::Rect(0, 0, 320, 200), 0);
 	_screen->update();
@@ -254,6 +254,11 @@ void AmberEngine::initAmberstarWorld() {
 	_player.facing = DIR_DOWN;
 	_cameraTileX = 0;
 	_cameraTileY = 0;
+	_party[0] = new AmbermoonPerson("HERO", 1, 50, 0, false);
+
+	// Use the correct loader for Amberstar
+	AmberstarAssetLoader loader;
+	loader.loadPartyPortraits(this);
 }
 
 void AmberEngine::handleInput() {
@@ -448,6 +453,9 @@ void AmberEngine::renderFrame() {
 
 void AmberEngine::renderAmberstarFrame() {
 	_font->drawString(_screen, "Hello Amberstar", 10, 10, 15);
+	if (_ui->getPortrait(0)) {
+		_screen->transBlitFrom(*_ui->getPortrait(0), Common::Point(10, 30), 0);
+	}
 }
 
 void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {
@@ -479,7 +487,8 @@ void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {
 }
 
 Graphics::Surface *AmberEngine::decodePlanarGraphic(Common::SeekableReadStream *stream, uint16 width,
-													uint16 height, uint8 planes, uint8 paletteOffset) {
+													uint16 height, uint8 planes, uint8 paletteOffset,
+													bool isChunkInterleaved) {
 	Graphics::Surface *surface = new Graphics::Surface();
 
 	surface->create(width, height, Graphics::PixelFormat::createFormatCLUT8());
@@ -488,8 +497,17 @@ Graphics::Surface *AmberEngine::decodePlanarGraphic(Common::SeekableReadStream *
 	// +7 is used for cases like if an image is 33 pixels wide 33/2 = 4 but we have 1 pixel left over
 	// we need 5 bytes to hold 33 pixels (33+7)/8 = 5
 	uint32 bytesPerRow = (width + 7) / 8;
-	uint32 planeSize = bytesPerRow * height;   // total bytes for one single plane
-	uint32 totalDataSize = planeSize * planes; // total bytes for all planes combined
+	uint16 chunksPerRow = (width + 15) / 16;
+	uint32 totalDataSize = 0;
+
+	if (isChunkInterleaved) {
+		// amberstar graphics are stored in 16-pixel (2-byte) chunks, interleaved by plane
+		uint16 wordsPerChunk = planes;
+		totalDataSize = chunksPerRow * wordsPerChunk * 2 * height;
+	} else {
+		uint32 planeSize = bytesPerRow * height; // total bytes for one single plane
+		totalDataSize = planeSize * planes; // total bytes for all planes combined
+	}
 
 	byte *planarData = (byte *)malloc(totalDataSize);
 	stream->read(planarData, totalDataSize);
@@ -500,25 +518,50 @@ Graphics::Surface *AmberEngine::decodePlanarGraphic(Common::SeekableReadStream *
 		byte *row = (byte *)surface->getBasePtr(0, y);
 
 		for (uint16 x = 0; x < width; x++) {
-			// on which bit on this byte is our coordinate
-			uint8 bitIndex = x % 8;
 			byte paletteIndex = 0; // this will hold our final, stacked color index
 
-			uint32 rowOffset = y * (bytesPerRow * planes);
-			uint32 byteOffset = x / 8;
+			if (isChunkInterleaved) {
+				// amberstar uses 16-bit chunk
+				uint16 chunkX = x / 16;
+				uint16 pixelInChunk = x % 16;
 
-			// stack the planes to build the color since amiga uses plane graphics
-			for (uint8 p = 0; p < planes; p++) {
+				// calculate where this 16-pixel chunk starts in the file
+				uint32 chunkOffset = (y * chunksPerRow + chunkX) * (planes * 2);
 
-				// jump to the correct plane's memory block, then find our specific byte
-				uint32 planeOffset = p * bytesPerRow;
-				uint32 dataOffset = rowOffset + planeOffset + byteOffset;
+				for (uint8 p = 0; p < planes; p++) {
+					uint32 wordOffset = chunkOffset + (p * 2);
 
-				// amiga reads bits visually from left to right (big endian)
-				// so if we want pixel 0, we check bit 7, pixel 1 = bit 6,..
-				if (planarData[dataOffset] & (1 << (7 - bitIndex))) {
-					// if there is a 1 on this plane, add its value to our color
-					paletteIndex |= (1 << p);
+					// read the 16-bit word for this plane
+					uint16 planeWord = (planarData[wordOffset] << 8) | planarData[wordOffset + 1];
+
+					// amiga reads bits visually from left to right (big endian)
+					// so if we want pixel 0, we check bit 7, pixel 1 = bit 6,..
+					if (planeWord & (1 << (15 - pixelInChunk))) {
+						// if there is a 1 on this plane, add its value to our color
+						paletteIndex |= (1 << p);
+					}
+				}
+			} else {
+				// ambermoon uses 8-bit rows
+				// on which bit on this byte is our coordinate
+				uint8 bitIndex = x % 8;
+
+				uint32 rowOffset = y * (bytesPerRow * planes);
+				uint32 byteOffset = x / 8;
+
+				// stack the planes to build the color since amiga uses plane graphics
+				for (uint8 p = 0; p < planes; p++) {
+
+					// jump to the correct plane's memory block, then find our specific byte
+					uint32 planeOffset = p * bytesPerRow;
+					uint32 dataOffset = rowOffset + planeOffset + byteOffset;
+
+					// amiga reads bits visually from left to right (big endian)
+					// so if we want pixel 0, we check bit 7, pixel 1 = bit 6,..
+					if (planarData[dataOffset] & (1 << (7 - bitIndex))) {
+						// if there is a 1 on this plane, add its value to our color
+						paletteIndex |= (1 << p);
+					}
 				}
 			}
 
@@ -531,30 +574,48 @@ Graphics::Surface *AmberEngine::decodePlanarGraphic(Common::SeekableReadStream *
 }
 
 Graphics::Surface *AmberEngine::decodePlanarGraphic(const byte *planarData, uint16 width,
-													uint16 height, uint8 planes, uint8 paletteOffset) {
+													uint16 height, uint8 planes, uint8 paletteOffset,
+													bool isChunkInterleaved) {
 	Graphics::Surface *surface = new Graphics::Surface();
 	surface->create(width, height, Graphics::PixelFormat::createFormatCLUT8());
 
 	uint32 bytesPerRow = (width + 7) / 8;
+	uint16 chunksPerRow = (width + 15) / 16;
 
 	for (uint16 y = 0; y < height; y++) {
 		byte *row = (byte *)surface->getBasePtr(0, y);
 
 		for (uint16 x = 0; x < width; x++) {
-			uint8 bitIndex = x % 8;
 			byte paletteIndex = 0;
 
-			uint32 rowOffset = y * (bytesPerRow * planes);
-			uint32 byteOffset = x / 8;
+			if (isChunkInterleaved) {
+				uint16 chunkX = x / 16;
+				uint16 pixelInChunk = x % 16;
+				uint32 chunkOffset = (y * chunksPerRow + chunkX) * (planes * 2);
 
-			for (uint8 p = 0; p < planes; p++) {
-				uint32 planeOffset = p * bytesPerRow;
-				uint32 dataOffset = rowOffset + planeOffset + byteOffset;
+				for (uint8 p = 0; p < planes; p++) {
+					uint32 wordOffset = chunkOffset + (p * 2);
+					uint16 planeWord = (planarData[wordOffset] << 8) | planarData[wordOffset + 1];
 
-				if (planarData[dataOffset] & (1 << (7 - bitIndex))) {
-					paletteIndex |= (1 << p);
+					if (planeWord & (1 << (15 - pixelInChunk))) {
+						paletteIndex |= (1 << p);
+					}
+				}
+			} else {
+				uint8 bitIndex = x % 8;
+				uint32 rowOffset = y * (bytesPerRow * planes);
+				uint32 byteOffset = x / 8;
+
+				for (uint8 p = 0; p < planes; p++) {
+					uint32 planeOffset = p * bytesPerRow;
+					uint32 dataOffset = rowOffset + planeOffset + byteOffset;
+
+					if (planarData[dataOffset] & (1 << (7 - bitIndex))) {
+						paletteIndex |= (1 << p);
+					}
 				}
 			}
+
 			row[x] = paletteIndex + paletteOffset;
 		}
 	}

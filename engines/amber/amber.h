@@ -119,9 +119,11 @@ public:
 
 	void loadAmigaPalette(Common::SeekableReadStream *stream);
 	Graphics::Surface *decodePlanarGraphic(Common::SeekableReadStream *stream, uint16 width,
-										   uint16 height, uint8 planes, uint8 paletteOffset = 0);
+										   uint16 height, uint8 planes, uint8 paletteOffset = 0,
+										   bool isChunkInterleaved = false);
 	Graphics::Surface *decodePlanarGraphic(const byte *planarData, uint16 width,
-										   uint16 height, uint8 planes, uint8 paletteOffset = 0);
+										   uint16 height, uint8 planes, uint8 paletteOffset = 0,
+										   bool isChunkInterleaved = false);
 
 	uint32 getFeatures() const;
 

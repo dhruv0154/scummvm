@@ -90,6 +90,8 @@ public:
 	void setExplorationLayout(Graphics::Surface *layout);
 	void setButtonIcon(int index, Graphics::Surface *icon);
 	void setCCButtonIcon(int index, Graphics::Surface *icon);
+	void setPortrait(int index, Graphics::Surface *surface);
+	Graphics::Surface *getPortrait(int index) const;
 
 	// draws window with the stone borders and colored background
 	void drawWindow(Graphics::Screen *screen, int x, int y, int widthTiles, int heightTiles);
@@ -101,7 +103,6 @@ public:
 	void drawExplorationLayout(Graphics::Screen *screen);
 
 	void drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine);
-	bool loadPartyPortraits(AmberEngine *engine);
 
 	void drawPortraitBackground(Graphics::Screen *screen, int x, int y);
 	void drawBar(Graphics::Screen *screen, int x, int y, int w, int current, int max, byte color, byte shadowColor);

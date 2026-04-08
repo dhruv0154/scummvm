@@ -136,6 +136,17 @@ void AmberUI::setCCButtonIcon(int index, Graphics::Surface *icon) {
 		_ccIcons[index] = icon;
 }
 
+void AmberUI::setPortrait(int index, Graphics::Surface *surface) {
+	if (index >= 0 && index < 6)
+		_portraits[index] = surface;
+}
+
+Graphics::Surface *AmberUI::getPortrait(int index) const {
+	if (index >= 0 && index < 6)
+		return _portraits[index];
+	return nullptr;
+}
+
 void AmberUI::drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine) {
 	if (!screen || !_statusL)
 		return;
@@ -188,29 +199,6 @@ void AmberUI::drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine) {
 			screen->transBlitFrom(*_emptyPortrait, Common::Point(portraitX, 1), 56);
 		}
 	}
-}
-
-bool AmberUI::loadPartyPortraits(AmberEngine *engine) {
-	AmberArchive portraitArchive;
-	if (!portraitArchive.open(Common::Path("Portraits.amb"))) {
-		warning("AmberUI: Portraits.amb not found");
-		return false;
-	}
-
-	for (int i = 0; i < 6; i++) {
-		if (engine->_party[i] != nullptr) { // If a character exists in this slot
-			Common::String idStr = Common::String::format("%d", engine->_party[i]->_portraitId);
-			Common::SeekableReadStream *portraitStream = portraitArchive.createReadStreamForMember(Common::Path(idStr));
-
-			if (portraitStream) {
-				_portraits[i] = engine->decodePlanarGraphic(portraitStream, 32, 34, 5, 32);
-				delete portraitStream;
-			}
-		}
-	}
-
-	portraitArchive.close();
-	return true;
 }
 
 void AmberUI::drawPortraitBackground(Graphics::Screen *screen, int x, int y) {
