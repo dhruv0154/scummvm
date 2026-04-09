@@ -98,6 +98,12 @@ AmberEngine::AmberEngine(OSystem *syst, const ADGameDescription *gameDesc) : Eng
 }
 
 AmberEngine::~AmberEngine() {
+	if (_isAmberstar) {
+		// the tileset owns the player graphics in amberstar.
+		// we null them out here so AmberPlayer doesn't triggers a crash
+		for (int i = 0; i < 4; i++)
+			_player.sprites[i] = nullptr;
+	}
 	delete _screen;
 	delete _font;
 	delete _cursor;
@@ -259,6 +265,15 @@ void AmberEngine::initAmberstarWorld() {
 	// Use the correct loader for Amberstar
 	AmberstarAssetLoader loader;
 	loader.loadPartyPortraits(this);
+
+	_tileset.loadAmberstar(2, this);
+	uint16 baseTileIndex = _tileset._playerSpriteIndex;
+	uint16 gfxIdx = _tileset._tileInfos[baseTileIndex - 1].graphicIndex;
+
+	for (int i = 0; i < 4; i++) {
+		// Frame 0 = Up, Frame 1 = Right, Frame 2 = Down, Frame 3 = Left
+		_player.sprites[i] = _tileset._graphics[gfxIdx + i];
+	}
 }
 
 void AmberEngine::handleInput() {
@@ -452,10 +467,16 @@ void AmberEngine::renderFrame() {
 }
 
 void AmberEngine::renderAmberstarFrame() {
+	_screen->fillRect(Common::Rect(0, 0, 320, 200), 0);
 	_font->drawString(_screen, "Hello Amberstar", 10, 10, 15);
 	if (_ui->getPortrait(0)) {
 		_screen->transBlitFrom(*_ui->getPortrait(0), Common::Point(10, 30), 0);
 	}
+
+	Graphics::Surface *activeSprite = _player.sprites[_player.facing];
+	if (activeSprite)
+		// we use 32 as the transparency key for the map graphics
+		_screen->transBlitFrom(*activeSprite, Common::Point(150, 100), 32);
 }
 
 void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {

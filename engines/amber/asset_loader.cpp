@@ -535,44 +535,6 @@ bool AmberstarAssetLoader::ensureDevDataLoaded() {
 	return true;
 }
 
-void AmberstarAssetLoader::decodeCompactPalette(Common::SeekableReadStream *stream, byte *paletteOut) {
-	// compact palettes are exactly 16 colors, 2 bytes per color (no header)
-	for (int i = 0; i < 16; i++) {
-		uint8 b0 = stream->readByte();
-		uint8 b1 = stream->readByte();
-
-		// extract 3-bit colors from the nibbles
-		uint8 r = b0 & 0x07;
-		uint8 g = (b1 & 0x70) >> 4;
-		uint8 b = b1 & 0x07;
-
-		// map 0-7 range to 0-255 range
-		// if 0 stay 0 otherwise, multiply by 32 and add 16 for brightness adjustment
-		paletteOut[i * 3 + 0] = (r == 0) ? 0 : (r * 32) + 16;
-		paletteOut[i * 3 + 1] = (g == 0) ? 0 : (g * 32) + 16;
-		paletteOut[i * 3 + 2] = (b == 0) ? 0 : (b * 32) + 16;
-	}
-}
-
-void AmberstarAssetLoader::decodeWidePalette(Common::SeekableReadStream *stream, byte *paletteOut) {
-	// wide palettes start with a 2-byte header indicating the number of colors
-	uint16 numColors = stream->readUint16BE();
-
-	// loop through the specified number of colors (usually 16)
-	for (int i = 0; i < numColors; i++) {
-		stream->readByte(); // alpha channel (unused in amberstar, always 0)
-		uint8 r = stream->readByte();
-		uint8 g = stream->readByte();
-		uint8 b = stream->readByte();
-
-		// map 0-7 range to 0-255 range
-		// if 0 stay 0 otherwise, multiply by 32 and add 16 for brightness adjustment
-		paletteOut[i * 3 + 0] = (r == 0) ? 0 : (r * 32) + 16;
-		paletteOut[i * 3 + 1] = (g == 0) ? 0 : (g * 32) + 16;
-		paletteOut[i * 3 + 2] = (b == 0) ? 0 : (b * 32) + 16;
-	}
-}
-
 void AmberstarAssetLoader::loadUIPalette(AmberEngine *engine) {
 	// hardcoded 32-byte compact UI palette
 	// this represents exactly 16 colors (2 bytes per color)

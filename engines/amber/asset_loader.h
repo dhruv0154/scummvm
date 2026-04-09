@@ -69,10 +69,6 @@ private:
 
 	bool ensureDevDataLoaded();
 
-	// helpers for amberstar's specific palette formats
-	void decodeCompactPalette(Common::SeekableReadStream *stream, byte *paletteOut);
-	void decodeWidePalette(Common::SeekableReadStream *stream, byte *paletteOut);
-
 	// helper to load the hardcoded UI palette
 	void loadUIPalette(AmberEngine *engine);
 

@@ -43,11 +43,13 @@ class AmberTileset {
 public:
 	Common::Array<AmberTileInfo> _tileInfos;
 	Common::Array<Graphics::Surface *> _graphics; // array of pointers to the raw pixels
+	uint16 _playerSpriteIndex;
 
 	AmberTileset();
 	~AmberTileset();
 
 	bool load(uint16 tilesetId, AmberEngine *engine);
+	bool loadAmberstar(uint16 tilesetId, AmberEngine *engine);
 	Graphics::Surface *getGraphic(uint16 tileIndex, uint32 currentTicks);
 };
 

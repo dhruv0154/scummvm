@@ -30,6 +30,9 @@ namespace Amber {
 Common::SeekableReadStream *createJHStream(Common::SeekableReadStream *stream, uint16 key, uint32 size);
 Common::SeekableReadStream *createLOBStream(Common::SeekableReadStream *stream, uint32 decodedSize);
 
+void decodeCompactPalette(Common::SeekableReadStream *stream, byte *paletteOut);
+void decodeWidePalette(Common::SeekableReadStream *stream, byte *paletteOut);
+
 } // End of namespace Amber
 
 #endif // AMBER_DECODERS_H

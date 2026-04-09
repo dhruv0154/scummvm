@@ -23,6 +23,8 @@
 #include "archive.h"
 #include "common/debug.h"
 #include "common/stream.h"
+#include "graphics/paletteman.h"
+#include "decoders.h"
 #include "amber.h"
 
 namespace Amber {
@@ -136,6 +138,89 @@ bool AmberTileset::load(uint16 tilesetId, AmberEngine *engine) {
 	delete stream;
 	archive.close();
 
+	return true;
+}
+
+bool AmberTileset::loadAmberstar(uint16 tilesetId, AmberEngine *engine) {
+	AmberArchive archive;
+	// ICON_DAT.AMB is an AMPC archive containing tilesets 1 (world) and 2 (indoors)
+	if (!archive.open(Common::Path("ICON_DAT.AMB"))) {
+		warning("AmberTileset: Failed to open ICON_DAT.AMB");
+		return false;
+	}
+
+	Common::Path tilesetFileId(Common::String::format("%d", tilesetId));
+	Common::SeekableReadStream *stream = archive.createReadStreamForMember(tilesetFileId);
+
+	if (!stream) {
+		warning("AmberTileset: Failed to extract subfile %d from ICON_DAT.AMB", tilesetId);
+		archive.close();
+		return false;
+	}
+
+	_playerSpriteIndex = stream->readUint16BE();
+
+	// resize tile infos to exactly 250 (amberstar limit)
+	_tileInfos.resize(250);
+
+	// frame counts
+	for (int i = 0; i < 250; i++)
+		_tileInfos[i].numFrames = stream->readByte();
+
+	// image indices
+	stream->seek(0x00FC);
+	uint16 maxGraphicIndex = 0;
+	for (int i = 0; i < 250; i++) {
+		_tileInfos[i].graphicIndex = stream->readUint16BE();
+
+		// calculate the highest graphic index we need to allocate memory for
+		if (_tileInfos[i].graphicIndex > 0) {
+			uint16 highestNeeded = _tileInfos[i].graphicIndex + _tileInfos[i].numFrames - 1;
+			if (highestNeeded > maxGraphicIndex)
+				maxGraphicIndex = highestNeeded;
+		}
+	}
+	// tile flags
+	stream->seek(0x02F0);
+	for (int i = 0; i < 250; i++)
+		_tileInfos[i].flags = stream->readUint32BE();
+
+	// minimap colors
+	stream->seek(0x06D8);
+	for (int i = 0; i < 250; i++)
+		_tileInfos[i].minimapColor = stream->readByte();
+
+	// wide palette
+	stream->seek(0x07D2);
+	uint16 numColors = stream->readUint16BE();
+	byte tilePalette[32 * 3] = {0}; // max 32 colors, though amberstar usually uses 16
+	stream->seek(0x07D2);
+	decodeWidePalette(stream, tilePalette);
+
+	g_system->getPaletteManager()->setPalette(tilePalette, 32, numColors);
+
+	// sprites
+	stream->seek(0x0814);
+
+	_graphics.resize(maxGraphicIndex + 1);
+	for (uint16 i = 0; i <= maxGraphicIndex; i++)
+		_graphics[i] = nullptr;
+
+	for (uint16 i = 1; i <= maxGraphicIndex; i++) {
+		if (stream->eos())
+			break;
+		// there is a 6 byte header before every sprite
+		uint16 width_m1 = stream->readUint16BE();
+		uint16 height_m1 = stream->readUint16BE();
+		uint16 numBitplanes = stream->readUint16BE();
+
+		uint16 actualWidth = width_m1 + 1;
+		uint16 actualHeight = height_m1 + 1;
+		_graphics[i] = engine->decodePlanarGraphic(stream, actualWidth, actualHeight, numBitplanes, 32, true);
+	}
+
+	delete stream;
+	archive.close();
 	return true;
 }
 
