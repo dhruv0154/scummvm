@@ -366,10 +366,11 @@ bool AmbermoonAssetLoader::loadUI(AmberEngine *engine) {
 	topBarOffset += 216;
 
 	// SmallBorder1 & 2 (Combined into 32x1, 3 planes) = 12 bytes
-	Graphics::Surface *statTB = engine->decodePlanarGraphic(hunk0 + topBarOffset, 32, 1, 3, 56);
+	Graphics::Surface *statT = engine->decodePlanarGraphic(hunk0 + topBarOffset, 32, 1, 3, 56);
+	Graphics::Surface *statB = engine->decodePlanarGraphic(hunk0 + topBarOffset, 32, 1, 3, 56);
 	topBarOffset += 12;
 
-	engine->_ui->setPortraitBars(statL, statM, statR, statTB);
+	engine->_ui->setPortraitBars(statL, statM, statR, statT, statB);
 
 	uint32 emptyFaceOffset = 11688;
 	engine->_ui->setEmptyPortrait(engine->decodePlanarGraphic(hunk0 + emptyFaceOffset, 32, 34, 3, 56));
@@ -645,8 +646,197 @@ bool AmberstarAssetLoader::loadFont(AmberEngine *engine) {
 
 	return true;
 }
-bool AmberstarAssetLoader::loadUI(AmberEngine *engine) { loadUIPalette(engine); return true; }
-bool AmberstarAssetLoader::loadButtons(AmberEngine *engine) { return true; }
+uint32 AmberstarAssetLoader::findSignature(const byte *data, uint32 dataSize, const byte *signature, uint32 sigSize) {
+	if (sigSize == 0 || dataSize < sigSize)
+		return 0;
+
+	for (uint32 i = 0; i <= dataSize - sigSize; i++) {
+		bool match = true;
+		for (uint32 j = 0; j < sigSize; j++) {
+			if (data[i + j] != signature[j]) {
+				match = false;
+				break;
+			}
+		}
+		if (match)
+			return i;
+	}
+	return 0;
+}
+
+bool AmberstarAssetLoader::loadUI(AmberEngine *engine) {
+	loadUIPalette(engine);
+
+	if (!ensureDevDataLoaded())
+		return false;
+
+	byte customColors[24 * 3]; // 24 colors total
+	for (int i = 0; i < 16; i++) {
+		customColors[i * 3 + 0] = i * 10; // R fades from black (0) to blood red (150)
+		customColors[i * 3 + 1] = 0;      // G
+		customColors[i * 3 + 2] = 0;      // B
+	}
+
+	// 216-217: Amberstar HP bar (Shadow, Main)
+	customColors[16 * 3 + 0] = 120; // Shadow R (Dark Brown)
+	customColors[16 * 3 + 1] = 50;  // Shadow G
+	customColors[16 * 3 + 2] = 10;  // Shadow B
+	customColors[17 * 3 + 0] = 230; // Main R (Golden Orange)
+	customColors[17 * 3 + 1] = 140; // Main G
+	customColors[17 * 3 + 2] = 20;  // Main B
+
+	// 218-219: Amberstar SP bar (Shadow, Main)
+	customColors[18 * 3 + 0] = 20;  // Shadow R (Dark Blue)
+	customColors[18 * 3 + 1] = 40;  // Shadow G
+	customColors[18 * 3 + 2] = 120; // Shadow B
+	customColors[19 * 3 + 0] = 50;  // Main R (Light Blue)
+	customColors[19 * 3 + 1] = 120; // Main G
+	customColors[19 * 3 + 2] = 200; // Main B
+
+	g_system->getPaletteManager()->setPalette(customColors, 200, 24);
+
+	// Extracted from ST source: SB_LEFT.IMG
+	const byte sigLeftEdge[] = {
+		0x00, 0x1c, 0x00, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x30, 0x00, 0xce, 0x00, 0x00};
+
+	// Extracted from ST source: SB_MID.IMG
+	const byte sigMidEdge[] = {
+		0x65, 0x5c, 0x9b, 0xbf, 0x00, 0x00, 0x64, 0x40, 0xa6, 0x49, 0xbe, 0x79, 0x41, 0x86, 0x00, 0x00};
+
+	// Extracted from ST source: SB_RIGHT.IMG
+	const byte sigRightEdge[] = {
+		0xa0, 0x00, 0xe0, 0x00, 0x18, 0x00, 0x00, 0x00, 0xa4, 0x00, 0xbc, 0x00, 0x43, 0x00, 0x00, 0x00};
+
+	// Extracted from ST source: SB_TOP.IMG
+	const byte sigTopEdge[] = {
+		0xe6, 0x9e, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x80, 0x6a, 0xa6, 0xf7, 0xdf, 0x00, 0x00, 0x08, 0x20};
+
+	// Extracted from ST source: SB_BOTT.IMG
+	const byte sigBotEdge[] = {
+		0xd8, 0x30, 0xd8, 0x30, 0x27, 0xcf, 0x00, 0x00, 0xdb, 0x86, 0xdb, 0x86, 0x24, 0x79, 0x00, 0x00};
+
+	const byte sigFrame001[] = {
+		0x08, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x4f, 0x0d, 0x0e, 0x0e};
+
+	// LAYOUT.ICN (16x16 tile graphics)
+	const byte sigLayoutIcn[] = {
+		0xaa, 0xaa, 0x00, 0x00, 0xaa, 0xaa, 0x00, 0x00, 0x55, 0x55, 0x00, 0x00, 0x55, 0x55, 0x00, 0x00};
+
+	// look for the offsets in AMBERDEV.UDO
+	uint32 offsetL = findSignature(_devData, _devDataSize, sigLeftEdge, sizeof(sigLeftEdge));
+	uint32 offsetM = findSignature(_devData, _devDataSize, sigMidEdge, sizeof(sigMidEdge));
+	uint32 offsetR = findSignature(_devData, _devDataSize, sigRightEdge, sizeof(sigRightEdge));
+	uint32 offsetT = findSignature(_devData, _devDataSize, sigTopEdge, sizeof(sigTopEdge));
+	uint32 offsetB = findSignature(_devData, _devDataSize, sigBotEdge, sizeof(sigBotEdge));
+
+	// look for layout signatures
+	uint32 offsetLayouts = findSignature(_devData, _devDataSize, sigFrame001, sizeof(sigFrame001));
+	uint32 offsetLayoutIcn = findSignature(_devData, _devDataSize, sigLayoutIcn, sizeof(sigLayoutIcn));
+
+	Graphics::Surface *statL = nullptr, *statM = nullptr, *statR = nullptr, *statT = nullptr, *statB = nullptr;
+
+	if (offsetL)
+		statL = engine->decodePlanarGraphic(_devData + offsetL, 16, 36, 4, 0, true);
+	if (offsetM)
+		statM = engine->decodePlanarGraphic(_devData + offsetM, 16, 36, 4, 0, true);
+	if (offsetR)
+		statR = engine->decodePlanarGraphic(_devData + offsetR, 16, 36, 4, 0, true);
+	if (offsetT)
+		statT = engine->decodePlanarGraphic(_devData + offsetT, 32, 1, 4, 0, true);
+	if (offsetB)
+		statB = engine->decodePlanarGraphic(_devData + offsetB, 32, 1, 4, 0, true);
+
+	engine->_ui->setPortraitBars(statL, statM, statR, statT, statB);
+
+	// parse FRAME.001 and build the exploration layout
+	if (offsetLayouts && offsetLayoutIcn) {
+		Graphics::Surface *layoutSurf = new Graphics::Surface();
+		layoutSurf->create(320, 163, Graphics::PixelFormat::createFormatCLUT8());
+
+		byte *frameData = _devData + offsetLayouts;
+		int destY = 0;
+		int frameIdx = 0;
+
+		// 1st line (height 12, cropped 4 pixels from top)
+		for (int x = 0; x < 20; x++) {
+			uint8 iconId = frameData[frameIdx++] - 1; // 1 based indices
+			Graphics::Surface *tile = engine->decodePlanarGraphic(_devData + offsetLayoutIcn + (iconId * 128), 16, 16, 4, 0, true);
+			for (int ty = 4; ty < 16; ty++) {
+				memcpy(layoutSurf->getBasePtr(x * 16, destY + ty - 4), tile->getBasePtr(0, ty), 16);
+			}
+			tile->free();
+			delete tile;
+		}
+		destY += 12;
+
+		// 9 middle lines (full height 16)
+		for (int y = 0; y < 9; y++) {
+			for (int x = 0; x < 20; x++) {
+				uint8 iconId = frameData[frameIdx++] - 1;
+				Graphics::Surface *tile = engine->decodePlanarGraphic(_devData + offsetLayoutIcn + (iconId * 128), 16, 16, 4, 0, true);
+				for (int ty = 0; ty < 16; ty++) {
+					memcpy(layoutSurf->getBasePtr(x * 16, destY + ty), tile->getBasePtr(0, ty), 16);
+				}
+				tile->free();
+				delete tile;
+			}
+			destY += 16;
+		}
+
+		// last line (height 7, cropped from bottom)
+		for (int x = 0; x < 20; x++) {
+			uint8 iconId = frameData[frameIdx++] - 1;
+			Graphics::Surface *tile = engine->decodePlanarGraphic(_devData + offsetLayoutIcn + (iconId * 128), 16, 16, 4, 0, true);
+			for (int ty = 0; ty < 7; ty++) {
+				memcpy(layoutSurf->getBasePtr(x * 16, destY + ty), tile->getBasePtr(0, ty), 16);
+			}
+			tile->free();
+			delete tile;
+		}
+
+		engine->_ui->setExplorationLayout(layoutSurf);
+
+		// decode amberstone icon for empty party slots in the portrait bar
+		Graphics::Surface *emptyPortraitSurf = nullptr;
+		uint32 offsetAmberstone = 261892;
+
+		if (_devDataSize >= offsetAmberstone + 544)
+			emptyPortraitSurf = engine->decodePlanarGraphic(_devData + offsetAmberstone, 32, 34, 4, 0, true);
+
+		engine->_ui->setEmptyPortrait(emptyPortraitSurf);
+
+	} else {
+		warning("AmberstarAssetLoader: Could not find FRAME.001 or LAYOUT.ICN signatures in AMBERDEV.UDO!");
+	}
+
+	return true;
+}
+
+bool AmberstarAssetLoader::loadButtons(AmberEngine *engine) {
+	if (!ensureDevDataLoaded())
+		return false;
+
+	const byte sigControlIcn[] = {
+		0x3f, 0xff, 0xff, 0xff, 0x3f, 0xff, 0x3f, 0xff, 0xff, 0xf8, 0xff, 0xff, 0xff, 0xf8, 0xff, 0xf8};
+
+	uint32 offsetControl = findSignature(_devData, _devDataSize, sigControlIcn, sizeof(sigControlIcn));
+
+	if (offsetControl) {
+		uint32 bytesPerIcon = 256;
+		// 2D city movement indices mapped from C2_CIL in the asm
+		int iconIndices[9] = {46, 1, 45, 4, 7, 3, 48, 2, 47};
+
+		for (int i = 0; i < 9; i++) {
+			// subtract 1 because index 0 is an empty block preceding CONTROL.ICN
+			int actualIdx = iconIndices[i] - 1;
+			Graphics::Surface *btn = engine->decodePlanarGraphic(_devData + offsetControl + (actualIdx * bytesPerIcon), 32, 16, 4, 0, true);
+			engine->_ui->setButtonIcon(i, btn);
+		}
+	} else {
+		warning("AmberstarAssetLoader: CONTROL.ICN signature not found in AMBERDEV.UDO!");
+	}
+	return true;
+}
 
 bool AmberstarAssetLoader::loadPartyPortraits(AmberEngine *engine) {
 	AmberArchive charArchive;

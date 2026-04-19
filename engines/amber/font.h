@@ -46,7 +46,8 @@ public:
 	void setMappingTable(const byte *table);
 	void setGlyph(int index, Graphics::Surface *surface);
 
-	void drawString(Graphics::Screen *screen, const Common::String &text, int x, int y, uint8 color = 31);
+	void drawString(Graphics::Screen *screen, const Common::String &text, int x, int y, uint8 color = 31,
+					bool dropShadow = true, uint8 shadowColor = 0);
 };
 
 } // End of namespace Amber

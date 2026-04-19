@@ -266,7 +266,14 @@ void AmberEngine::initAmberstarWorld() {
 	AmberstarAssetLoader loader;
 	loader.loadPartyPortraits(this);
 
-	_tileset.loadAmberstar(2, this);
+	if (_map.loadAmberstar(65)) {
+		// dynamically load whichever tileset the map header requested
+		_tileset.loadAmberstar(_map.header.tileset, this);
+	} else {
+		warning("AmberEngine: Failed to load Amberstar Map 1");
+		return;
+	}
+
 	uint16 baseTileIndex = _tileset._playerSpriteIndex;
 	uint16 gfxIdx = _tileset._tileInfos[baseTileIndex - 1].graphicIndex;
 
@@ -274,6 +281,12 @@ void AmberEngine::initAmberstarWorld() {
 		// Frame 0 = Up, Frame 1 = Right, Frame 2 = Down, Frame 3 = Left
 		_player.sprites[i] = _tileset._graphics[gfxIdx + i];
 	}
+
+	_player.mapX = 15;
+	_player.mapY = 15;
+	_player.facing = DIR_DOWN;
+	_cameraTileX = _player.mapX;
+	_cameraTileY = _player.mapY;
 }
 
 void AmberEngine::handleInput() {
@@ -395,7 +408,7 @@ void AmberEngine::renderFrame() {
 	int startY = UIConstants::MAP_VIEW_Y;
 
 	// draw the static user interface elements
-	_ui->drawExplorationLayout(_screen);
+	_ui->drawExplorationLayout(_screen, this);
 	_ui->drawPortraitBar(_screen, this);
 
 	for (int i = 0; i < 9; i++) {
@@ -468,15 +481,81 @@ void AmberEngine::renderFrame() {
 
 void AmberEngine::renderAmberstarFrame() {
 	_screen->fillRect(Common::Rect(0, 0, 320, 200), 0);
-	_font->drawString(_screen, "Hello Amberstar", 10, 10, 15);
-	if (_ui->getPortrait(0)) {
-		_screen->transBlitFrom(*_ui->getPortrait(0), Common::Point(10, 30), 0);
+	_ui->drawExplorationLayout(_screen, this);
+
+	// amberstar uses the exact same 11x9 viewport dimensions as ambermoon
+	int viewWidthTiles = 11;
+	int viewHeightTiles = 9;
+
+	// ui offset for the map viewport (16 pixels right, 49 pixels down)
+	int startX = UIConstants::MAP_VIEW_X;
+	int startY = UIConstants::MAP_VIEW_Y;
+
+	// loop through every visible row (y) and column (x) in the camera's view
+	for (int y = 0; y < viewHeightTiles; y++) {
+		for (int x = 0; x < viewWidthTiles; x++) {
+
+			// calculate the actual map array coordinate for this specific screen tile
+			int mapX = _cameraTileX + x - (viewWidthTiles / 2);
+			int mapY = _cameraTileY + y - (viewHeightTiles / 2);
+
+			// calculate the exact pixel coordinate on the screen to draw this tile
+			int screenX = startX + x * 16;
+			int screenY = startY + y * 16;
+
+			// check if this coordinate is safely inside the map boundaries
+			if (mapX >= 0 && mapX < _map.header.width && mapY >= 0 && mapY < _map.header.height) {
+				AmberMapTile2D &tile = _map.tiles2D[mapY * _map.header.width + mapX];
+
+				// get the current tick to drive animated tiles like water
+				uint32 currentTicks = g_system->getMillis() / 10;
+
+				// draw the background floor tile using 32 as the transparency key
+				Graphics::Surface *backGfx = _tileset.getGraphic(tile.backTileIndex, currentTicks);
+				if (backGfx)
+					_screen->transBlitFrom(*backGfx, Common::Point(screenX, screenY), 32);
+
+				// draw the foreground object tile (trees, walls, graves) on top
+				Graphics::Surface *frontGfx = _tileset.getGraphic(tile.frontTileIndex, currentTicks);
+				if (frontGfx)
+					_screen->transBlitFrom(*frontGfx, Common::Point(screenX, screenY), 32);
+			} else {
+				// if looking outside the map bounds, draw a black 16x16 square
+				_screen->fillRect(Common::Rect(screenX, screenY, screenX + 16, screenY + 16), 0);
+			}
+		}
 	}
 
+	// calculate the exact center of the map viewport for the player
+	int playerScreenX = startX + (viewWidthTiles / 2) * 16;
+
+	// shift the player sprite up by 16 pixels so their feet touch the current tile ground
+	int playerScreenY = startY + (viewHeightTiles / 2) * 16 - 16;
+
 	Graphics::Surface *activeSprite = _player.sprites[_player.facing];
-	if (activeSprite)
-		// we use 32 as the transparency key for the map graphics
-		_screen->transBlitFrom(*activeSprite, Common::Point(150, 100), 32);
+	if (activeSprite) {
+		// we use 32 as the transparency key because we loaded the tileset with palette offset 32
+		_screen->transBlitFrom(*activeSprite, Common::Point(playerScreenX, playerScreenY), 32);
+	}
+	_ui->drawPortraitBar(_screen, this);
+
+	// draw the movement pad
+	// asm: starts at X=208, Y=145, 32px horizontal spacing, 16px vertical spacing
+	int startGridX = 208;
+	int startGridY = 145;
+	int verticalSpacing = 16;
+
+	for (int i = 0; i < 9; i++) {
+		int col = i % 3;
+		int row = i / 3;
+		int btnX = startGridX + (col * 32);
+		int btnY = startGridY + (row * verticalSpacing);
+		bool isPressed = (_pressedButtonIndex == i);
+		int iconYOffset = isPressed ? 2 : 0;
+
+		if (_ui->_buttonIcons[i])
+			_screen->transBlitFrom(*_ui->_buttonIcons[i], Common::Point(btnX, btnY + iconYOffset), 24);
+	}
 }
 
 void AmberEngine::loadAmigaPalette(Common::SeekableReadStream *stream) {

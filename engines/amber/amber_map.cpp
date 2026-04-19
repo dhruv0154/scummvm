@@ -341,51 +341,120 @@ bool AmberMap::load(uint16 mapId) {
 	return true;
 }
 
+bool AmberMap::loadAmberstar(uint16 mapId) {
+	AmberArchive archive;
+	if (!archive.open(Common::Path("MAP_DATA.AMB"))) {
+		warning("AmberMap: Failed to open MAP_DATA.AMB");
+		return false;
+	}
+
+	Common::Path mapFileId(Common::String::format("%d", mapId));
+	Common::SeekableReadStream *stream = archive.createReadStreamForMember(mapFileId);
+
+	if (!stream) {
+		warning("AmberMap: Failed to extract map %d from MAP_DATA.AMB", mapId);
+		archive.close();
+		return false;
+	}
+
+	// magic number (must be 0xFF)
+	uint8 magic = stream->readByte();
+	if (magic != 0xFF) {
+		warning("AmberMap: Invalid magic number for Amberstar map %d", mapId);
+		delete stream;
+		archive.close();
+		return false;
+	}
+
+	// fill byte (0x00)
+	stream->readByte();
+
+	// tileset background id (2 bytes)
+	header.tileset = stream->readUint16BE();
+	// map type (00 = 2D map, 01 = 3D map)
+	header.type = stream->readByte();
+	// map flags (light, wilderness, etc)
+	header.flags = stream->readByte();
+	// active song id
+	header.musicIndex = stream->readByte();
+	// width and height in tiles
+	header.width = stream->readByte();
+	header.height = stream->readByte();
+
+	// we only care about top down 2d maps right now (type 0)
+	if (header.type != 0) {
+		warning("AmberMap: Map %d is a 3D labyrinth, skipping for now", mapId);
+		delete stream;
+		archive.close();
+		return false;
+	}
+
+	// allocate the grid memory
+	int numTiles = header.width * header.height;
+	tiles2D.resize(numTiles);
+
+	// maps.md explicitly states that 2d map data starts at offset 0xAC5
+	// this allows us to safely bypass the 30-byte name and complex npc tables
+	stream->seek(0xAC5);
+
+	// the background floor tiles
+	for (int i = 0; i < numTiles; i++)
+		tiles2D[i].backTileIndex = stream->readByte();
+
+	// the foreground overlay tiles
+	for (int i = 0; i < numTiles; i++)
+		tiles2D[i].frontTileIndex = stream->readByte();
+
+	// map locations to event ids
+	for (int i = 0; i < numTiles; i++)
+		tiles2D[i].mapEventId = stream->readByte();
+
+	delete stream;
+	archive.close();
+
+	return true;
+}
+
 bool AmberMap::allowMovement(int x, int y, AmberTileset *tileset, TravelType travelType, bool isAmberstar) {
 	// map boundary collision
 	if (x < 0 || x >= header.width || y < 0 || y >= header.height) {
 		return false;
 	}
 
-	// tile collision
-	if (isAmberstar) {
-		return true;
-	} else {
-		// 32-bit tile flags from IconData
-		AmberMapTile2D &tile = tiles2D[y * header.width + x];
+	// 32-bit tile flags from IconData
+	AmberMapTile2D &tile = tiles2D[y * header.width + x];
 
-		uint32 backFlags = 0;
-		uint32 frontFlags = 0;
+	uint32 backFlags = 0;
+	uint32 frontFlags = 0;
 
-		// extract background flags
-		if (tile.backTileIndex > 0 && tile.backTileIndex <= tileset->_tileInfos.size())
-			backFlags = tileset->_tileInfos[tile.backTileIndex - 1].flags;
+	// extract background flags
+	if (tile.backTileIndex > 0 && tile.backTileIndex <= tileset->_tileInfos.size())
+		backFlags = tileset->_tileInfos[tile.backTileIndex - 1].flags;
 
-		// extract foreground flags
-		if (tile.frontTileIndex > 0 && tile.frontTileIndex <= tileset->_tileInfos.size())
-			frontFlags = tileset->_tileInfos[tile.frontTileIndex - 1].flags;
+	// extract foreground flags
+	if (tile.frontTileIndex > 0 && tile.frontTileIndex <= tileset->_tileInfos.size())
+		frontFlags = tileset->_tileInfos[tile.frontTileIndex - 1].flags;
 
-		// determine the active collision flags
-		// If there is no front tile, or the front tile says to use the
-		// background's collision data (bit 5), we use the backFlags
-		uint32 activeFlags = frontFlags;
-		if (tile.frontTileIndex == 0 || (frontFlags & FLAG_USE_BACKGROUND_FLAGS))
-			activeFlags = backFlags;
+	// determine the active collision flags
+	// If there is no front tile, or the front tile says to use the
+	// background's collision data (bit 5), we use the backFlags
+	uint32 activeFlags = frontFlags;
+	if (tile.frontTileIndex == 0 || (frontFlags & FLAG_USE_BACKGROUND_FLAGS))
+		activeFlags = backFlags;
 
-		// hard block check
-		if (activeFlags & FLAG_BLOCK_ALL_MOVEMENT)
-			return false;
+	// hard block check
+	if (activeFlags & FLAG_BLOCK_ALL_MOVEMENT)
+		return false;
 
-		// travel type allowance starts at bit 8
-		// walk (0) = bit 8, horse (1) = bit 9, raft (2) = bit 10, etc.
-		// we shift a '1' by (8 + the travel type) to create our mask
-		uint32 travelMask = 1 << (8 + travelType);
+	// travel type allowance starts at bit 8
+	// walk (0) = bit 8, horse (1) = bit 9, raft (2) = bit 10, etc.
+	// we shift a '1' by (8 + the travel type) to create our mask
+	uint32 travelMask = 1 << (8 + travelType);
 
-		if ((activeFlags & travelMask) == 0)
-			return false; // the bit is 0, meaning this travel type is blocked here
+	if ((activeFlags & travelMask) == 0)
+		return false; // the bit is 0, meaning this travel type is blocked here
 
-		return true; // the tile is safe for this specific travel type
-	}
+	return true; // the tile is safe for this specific travel type
 }
 
 } // End of namespace Amber

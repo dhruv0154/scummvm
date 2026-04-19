@@ -42,7 +42,8 @@ AmberUI::AmberUI() {
 	_statusL = nullptr;
 	_statusM = nullptr;
 	_statusR = nullptr;
-	_statusTB = nullptr;
+	_statusT = nullptr;
+	_statusB = nullptr;
 	_emptyPortrait = nullptr;
 }
 
@@ -91,9 +92,13 @@ AmberUI::~AmberUI() {
 		_statusR->free();
 		delete _statusR;
 	}
-	if (_statusTB) {
-		_statusTB->free();
-		delete _statusTB;
+	if (_statusT) {
+		_statusT->free();
+		delete _statusT;
+	}
+	if (_statusB) {
+		_statusB->free();
+		delete _statusB;
 	}
 	if (_emptyPortrait) {
 		_emptyPortrait->free();
@@ -106,11 +111,12 @@ void AmberUI::setFrame(int index, Graphics::Surface *surface) {
 		_frames[index] = surface;
 }
 
-void AmberUI::setPortraitBars(Graphics::Surface *l, Graphics::Surface *m, Graphics::Surface *r, Graphics::Surface *tb) {
+void AmberUI::setPortraitBars(Graphics::Surface *l, Graphics::Surface *m, Graphics::Surface *r, Graphics::Surface *t, Graphics::Surface *b) {
 	_statusL = l;
 	_statusM = m;
 	_statusR = r;
-	_statusTB = tb;
+	_statusT = t;
+	_statusB = b;
 }
 
 void AmberUI::setEmptyPortrait(Graphics::Surface *surface) {
@@ -151,52 +157,78 @@ void AmberUI::drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine) {
 	if (!screen || !_statusL)
 		return;
 
+	bool isAmbermoon = (engine->getGameId() == "ambermoon");
+	byte uiTransKey = isAmbermoon ? 56 : 0;
+
 	// draw left edge
-	screen->transBlitFrom(*_statusL, Common::Point(0, 0), 56);
+	screen->transBlitFrom(*_statusL, Common::Point(0, 0), uiTransKey);
 
 	// draw the 6 middle dividers
 	int currentX = 48;
 	for (int i = 0; i < 6; i++) {
-		screen->transBlitFrom(*_statusM, Common::Point(currentX, 0), 56);
+		screen->transBlitFrom(*_statusM, Common::Point(currentX, 0), uiTransKey);
 		currentX += 48;
 	}
 
 	// draw right edge
-	screen->transBlitFrom(*_statusR, Common::Point(currentX - 32, 0), 56);
+	screen->transBlitFrom(*_statusR, Common::Point(currentX - 32, 0), uiTransKey);
 
 	// draw the 6 portrait slots
 	for (int slot = 0; slot < 6; slot++) {
 		int portraitX = (slot * 48) + 16;
 
-		screen->transBlitFrom(*_statusTB, Common::Point(portraitX, 0), 56);
-		screen->transBlitFrom(*_statusTB, Common::Point(portraitX, 35), 56);
+		screen->transBlitFrom(*_statusT, Common::Point(portraitX, 0), uiTransKey);
+		screen->transBlitFrom(*_statusB, Common::Point(portraitX, 35), uiTransKey);
 
 		AmberPerson *person = engine->_party[slot];
 
 		if (person && _portraits[slot]) {
 
-			drawPortraitBackground(screen, portraitX, 1);
+			if (isAmbermoon) {
+				drawPortraitBackground(screen, portraitX, 1);
 
-			// transparency key is 57 (mask color 25 + palette offset 32)
-			screen->transBlitFrom(*_portraits[slot], Common::Point(portraitX, 1), 57);
+				// transparency key is 57 (mask color 25 + palette offset 32)
+				screen->transBlitFrom(*_portraits[slot], Common::Point(portraitX, 1), 57);
 
-			// draw HP bar
-			drawBar(screen, portraitX + 35, 19, 3, person->_currentHP, person->_maxHP, 217, 216);
+				// draw HP bar
+				drawBar(screen, portraitX + 35, 19, 3, person->_currentHP, person->_maxHP, 217, 216);
 
-			// draw SP bar for characters with magic
-			if (person->_hasMagic)
-				drawBar(screen, portraitX + 43, 19, 3, person->_currentSP, person->_maxSP, 219, 218);
+				// draw SP bar for characters with magic
+				if (person->_hasMagic)
+					drawBar(screen, portraitX + 43, 19, 3, person->_currentSP, person->_maxSP, 219, 218);
 
-			// draw character name
-			Common::String shortName = person->_name.substr(0, 5);
+				// draw character name
+				Common::String shortName = person->_name.substr(0, 5);
 
-			// 220 = yellow (active), 221 = white (inactive)
-			uint8 nameColor = (slot == 0) ? 220 : 221;
+				// 220 = yellow (active), 221 = white (inactive)
+				uint8 nameColor = (slot == 0) ? 220 : 221;
 
-			engine->_font->drawString(screen, shortName, portraitX + 2, 28, nameColor);
+				engine->_font->drawString(screen, shortName, portraitX + 2, 28, nameColor);
+
+			} else {
+				drawPortraitBackground(screen, portraitX, 1);
+
+				// draw Portrait (use color 0 as transparent so the background gradient shows through)
+				screen->transBlitFrom(*_portraits[slot], Common::Point(portraitX, 1), 0);
+
+				// draw HP bar using custom colors
+				drawBar(screen, portraitX + 34, 19, 4, person->_currentHP, person->_maxHP, 217, 216);
+
+				// draw SP bar for characters with magic using custom colors
+				if (person->_hasMagic)
+					drawBar(screen, portraitX + 41, 19, 4, person->_currentSP, person->_maxSP, 219, 218);
+
+				// draw character name
+				Common::String shortName = person->_name.substr(0, 5);
+				int textWidth = shortName.size() * 6; // each glyph is exactly 6px wide
+				int textX = portraitX + (32 - textWidth) / 2; // center inside the 32px portrait
+
+				screen->fillRect(Common::Rect(textX - 2, 30, textX + textWidth + 2, 38), 0);
+				engine->_font->drawString(screen, shortName, textX, 31, (slot == 0) ? 15 : 9, true, 2);
+			}
 
 		} else if (_emptyPortrait) {
-			screen->transBlitFrom(*_emptyPortrait, Common::Point(portraitX, 1), 56);
+			screen->transBlitFrom(*_emptyPortrait, Common::Point(portraitX, 1), isAmbermoon ? 56 : 255);
 		}
 	}
 }
@@ -298,10 +330,11 @@ void AmberUI::drawButton(Graphics::Screen *screen, int x, int y, bool pressed) {
 		screen->transBlitFrom(*frame, Common::Point(x, y), 24);
 }
 
-void AmberUI::drawExplorationLayout(Graphics::Screen *screen) {
-	if (screen && _explorationLayout)
-		// we use 24 as the transparency key because the +24 offset shifted the empty pixels
-		screen->transBlitFrom(*_explorationLayout, Common::Point(UIConstants::LAYOUT_X, UIConstants::LAYOUT_Y), 24);
+void AmberUI::drawExplorationLayout(Graphics::Screen *screen, AmberEngine *engine) {
+	if (screen && _explorationLayout) {
+		byte transKey = (engine->getGameId() == "ambermoon") ? 24 : 0;
+		screen->transBlitFrom(*_explorationLayout, Common::Point(UIConstants::LAYOUT_X, UIConstants::LAYOUT_Y), transKey);
+	}
 }
 
 } // End of namespace Amber

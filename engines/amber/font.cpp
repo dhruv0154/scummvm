@@ -54,7 +54,8 @@ void AmberFont::setGlyph(int index, Graphics::Surface *surface) {
 	}
 }
 
-void AmberFont::drawString(Graphics::Screen *screen, const Common::String &text, int x, int y, uint8 color) {
+void AmberFont::drawString(Graphics::Screen *screen, const Common::String &text, int x, int y,
+						   uint8 color, bool dropShadow, uint8 shadowColor) {
 	if (!screen)
 		return;
 
@@ -84,12 +85,14 @@ void AmberFont::drawString(Graphics::Screen *screen, const Common::String &text,
 			if (_glyphs[glyphIndex] != nullptr) {
 				Graphics::Surface *glyph = _glyphs[glyphIndex];
 				// background shadow
-				for (int y = 0; y < glyph->h; y++) {
-					const byte *srcRow = (const byte *)glyph->getBasePtr(0, y);
-					byte *dstRow = (byte *)screen->getBasePtr(currentX + 1, currentY + y + 1);
-					for (int gx = 0; gx < glyph->w; ++gx) {
-						if (srcRow[gx] != 0) { // if it is a solid pixel
-							dstRow[gx] = 0;    // draw it black for the shadow
+				if (dropShadow) {
+					for (int y = 0; y < glyph->h; y++) {
+						const byte *srcRow = (const byte *)glyph->getBasePtr(0, y);
+						byte *dstRow = (byte *)screen->getBasePtr(currentX + 1, currentY + y + 1);
+						for (int gx = 0; gx < glyph->w; ++gx) {
+							if (srcRow[gx] != 0) { // if it is a solid pixel
+								dstRow[gx] = shadowColor;    // draw it in the passed color
+							}
 						}
 					}
 				}

@@ -139,6 +139,7 @@ public:
 	~AmberMap();
 
 	bool load(uint16 mapId);
+	bool loadAmberstar(uint16 mapId);
 };
 
 } // End of namespace Amber

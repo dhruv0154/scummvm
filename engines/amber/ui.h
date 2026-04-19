@@ -60,7 +60,8 @@ private:
 	Graphics::Surface *_statusL;
 	Graphics::Surface *_statusM;
 	Graphics::Surface *_statusR;
-	Graphics::Surface *_statusTB;
+	Graphics::Surface *_statusT;
+	Graphics::Surface *_statusB;
 	Graphics::Surface *_emptyPortrait;
 
 	Graphics::Surface *_portraits[6];
@@ -84,7 +85,7 @@ public:
 	Graphics::Surface *_ccIcons[5]; // 0:Male, 1:Female, 2:Left, 3:Right, 4:Ok
 
 	void setFrame(int index, Graphics::Surface *surface);
-	void setPortraitBars(Graphics::Surface *l, Graphics::Surface *m, Graphics::Surface *r, Graphics::Surface *tb);
+	void setPortraitBars(Graphics::Surface *l, Graphics::Surface *m, Graphics::Surface *r, Graphics::Surface *t, Graphics::Surface *b);
 	void setEmptyPortrait(Graphics::Surface *surface);
 	void setButtonFrames(Graphics::Surface *normal, Graphics::Surface *pressed);
 	void setExplorationLayout(Graphics::Surface *layout);
@@ -100,7 +101,7 @@ public:
 	void drawBox(Graphics::Screen *screen, Common::Rect area, bool sunken);
 	void drawButton(Graphics::Screen *screen, int x, int y, bool pressed = false);
 
-	void drawExplorationLayout(Graphics::Screen *screen);
+	void drawExplorationLayout(Graphics::Screen *screen, AmberEngine *engine);
 
 	void drawPortraitBar(Graphics::Screen *screen, AmberEngine *engine);
 
