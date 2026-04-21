@@ -591,8 +591,69 @@ Graphics::Surface *AmberstarAssetLoader::decodeAmberstarGlyph(byte *glyphData) {
 }
 
 bool AmberstarAssetLoader::loadCursor(AmberEngine *engine) {
+	if (!ensureDevDataLoaded())
+		return false;
+
+	constexpr int kNumCursors = 26;
+	constexpr int kCursorWidth = 16;
+	constexpr int kCursorHeight = 16;
+	constexpr int kBytesPerPlane = 32;
+	constexpr int kCursorBlockSize = 68; // 4 (hotspots) + 32 (graphic) + 32 (mask)
+
+	constexpr byte kColorTransparent = 24;
+	constexpr byte kColorFill = 15;   // white foreground
+	constexpr byte kColorOutline = 0; // black background
+
+	const byte sigCursor[] = {
+		0x00, 0x01, 0x00, 0x01,
+		0x00, 0x00, 0x70, 0x00, 0x78, 0x00, 0x5C, 0x00, 0x2E, 0x00};
+
+	uint32 currentOffset = findSignature(_devData, _devDataSize, sigCursor, sizeof(sigCursor));
+
+	if (currentOffset == 0) {
+		warning("AmberstarAssetLoader: Could not find cursor signature in AMBERDEV.UDO!");
+		return true;
+	}
+
+	for (int i = 0; i < kNumCursors; i++) {
+
+		int16 hotspotX = READ_BE_UINT16(_devData + currentOffset);
+		int16 hotspotY = READ_BE_UINT16(_devData + currentOffset + 2);
+
+		const byte *graphicData = _devData + currentOffset + 4;
+		const byte *maskData = graphicData + kBytesPerPlane;
+
+		Graphics::Surface *surf = new Graphics::Surface();
+		surf->create(kCursorWidth, kCursorHeight, Graphics::PixelFormat::createFormatCLUT8());
+
+		for (int y = 0; y < kCursorHeight; y++) {
+			byte *row = (byte *)surf->getBasePtr(0, y);
+
+			// read 16 pixels (2 bytes) for both planes
+			uint16 grWord = READ_BE_UINT16(graphicData + (y * 2));
+			uint16 maWord = READ_BE_UINT16(maskData + (y * 2));
+
+			for (int x = 0; x < kCursorWidth; x++) {
+				// 15 for the leftmost pixel, 0 for the rightmost
+				int bitShift = 15 - x;
+				bool isGraphicSolid = (grWord & (1 << bitShift)) != 0;
+				bool isMaskTransparent = (maWord & (1 << bitShift)) != 0;
+
+				// amberstar uses an inverted mask (1 = transparent, 0 = draw)
+				if (isMaskTransparent)
+					row[x] = kColorTransparent;
+				else
+					row[x] = isGraphicSolid ? kColorFill : kColorOutline;
+			}
+		}
+
+		engine->_cursor->setCursor(i, surf, hotspotX, hotspotY);
+		currentOffset += kCursorBlockSize;
+	}
+
 	return true;
 }
+
 bool AmberstarAssetLoader::loadFont(AmberEngine *engine) {
 	if (!ensureDevDataLoaded())
 		return false;
