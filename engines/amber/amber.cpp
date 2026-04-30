@@ -530,7 +530,7 @@ void AmberEngine::renderAmberstarFrame() {
 	int playerScreenX = startX + (viewWidthTiles / 2) * 16;
 
 	// shift the player sprite up by 16 pixels so their feet touch the current tile ground
-	int playerScreenY = startY + (viewHeightTiles / 2) * 16 - 16;
+	int playerScreenY = startY + (viewHeightTiles / 2) * 16;
 
 	Graphics::Surface *activeSprite = _player.sprites[_player.facing];
 	if (activeSprite) {
