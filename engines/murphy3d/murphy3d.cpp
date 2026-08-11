@@ -23,11 +23,16 @@
 #include "graphics/framelimiter.h"
 #include "murphy3d/detection.h"
 #include "murphy3d/console.h"
+#include "common/compression/access_lzw.h"
 #include "common/scummsys.h"
 #include "common/config-manager.h"
 #include "common/debug-channels.h"
 #include "common/events.h"
 #include "common/system.h"
+#include "common/file.h"
+#include "common/stream.h"
+#include "murphy3d/archive.h"
+#include "murphy3d/item.h"
 #include "engines/util.h"
 #include "graphics/paletteman.h"
 
@@ -67,26 +72,48 @@ Common::Error Murphy3dEngine::run() {
 	if (saveSlot != -1)
 		(void)loadGameState(saveSlot);
 
-	// Draw a series of boxes on screen as a sample
-	for (int i = 0; i < 100; ++i)
-		_screen->frameRect(Common::Rect(i, i, 320 - i, 200 - i), i);
-	_screen->update();
-
 	// Simple event handling loop
-	byte pal[256 * 3] = { 0 };
 	Common::Event e;
 	int offset = 0;
+
+	Archive archive;
+
+	if (archive.open("INV.AP")) {
+		debug(0, "Successfully opened INV.AP!");
+
+		Common::SeekableReadStream *palStream = archive.getStream(0);
+		if (palStream) {
+			byte palette[256 * 3];
+			palStream->read(palette, 256 * 3);
+
+			for (int i = 0; i < 256 * 3; i++) {
+				palette[i] = (palette[i] * 255) / 63;
+			}
+
+			g_system->getPaletteManager()->setPalette(palette, 0, 256);
+
+			delete palStream;
+		}
+
+		Common::SeekableReadStream *spriteStream = archive.getStream(5);
+		Item sprite;
+		sprite.load(spriteStream);
+
+		int screenX = (320 - sprite.getWidth()) / 2;
+		int screenY = (200 - sprite.getHeight()) / 2;
+
+		sprite.draw(_screen, screenX, screenY);
+
+	} else {
+		debug(0, "Failed to open INV.AP.");
+	}
 
 	Graphics::FrameLimiter limiter(g_system, 60);
 	while (!shouldQuit()) {
 		while (g_system->getEventManager()->pollEvent(e)) {
 		}
 
-		// Cycle through a simple palette
-		++offset;
-		for (int i = 0; i < 256; ++i)
-			pal[i * 3 + 1] = (i + offset) % 256;
-		g_system->getPaletteManager()->setPalette(pal, 0, 256);
+		
 		// Delay for a bit. All events loops should have a delay
 		// to prevent the system being unduly loaded
 		limiter.delayBeforeSwap();
