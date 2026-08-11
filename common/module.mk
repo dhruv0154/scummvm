@@ -48,6 +48,7 @@ MODULE_OBJS := \
 	util.o \
 	xpfloat.o \
 	zip-set.o \
+	compression/access_lzw.o \
 	std/std.o
 
 ifdef ENABLE_EVENTRECORDER
