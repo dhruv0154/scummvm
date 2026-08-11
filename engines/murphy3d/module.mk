@@ -3,6 +3,8 @@ MODULE := engines/murphy3d
 MODULE_OBJS = \
 	murphy3d.o \
 	console.o \
+	archive.o \
+	item.o \
 	metaengine.o
 
 # This module can be built as a plugin
