@@ -5,6 +5,7 @@ MODULE_OBJS = \
 	console.o \
 	archive.o \
 	item.o \
+	font.o \
 	metaengine.o
 
 # This module can be built as a plugin
