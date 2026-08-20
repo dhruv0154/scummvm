@@ -6,6 +6,7 @@ MODULE_OBJS = \
 	archive.o \
 	item.o \
 	font.o \
+	ptf_decoder.o \
 	metaengine.o
 
 # This module can be built as a plugin

@@ -33,6 +33,7 @@
 #include "common/stream.h"
 #include "murphy3d/archive.h"
 #include "murphy3d/item.h"
+#include "murphy3d/ptf_decoder.h"
 #include "engines/util.h"
 #include "graphics/paletteman.h"
 
@@ -58,8 +59,7 @@ Common::String Murphy3dEngine::getGameId() const {
 }
 
 Common::Error Murphy3dEngine::run() {
-	// Initialize 320x200 paletted graphics mode
-	initGraphics(320, 200);
+	initGraphics(640, 480);
 	_screen = new Graphics::Screen();
 
 	debug(0, "Murphy 3d engine starting..");
@@ -76,41 +76,53 @@ Common::Error Murphy3dEngine::run() {
 	Common::Event e;
 	int offset = 0;
 
-	Archive archive;
+	Archive titleArchive;
+	PTFDecoder *decoder = nullptr;
 
-	if (archive.open("INV.AP")) {
-		debug(0, "Successfully opened INV.AP!");
-
-		Common::SeekableReadStream *palStream = archive.getStream(0);
-		if (palStream) {
-			byte palette[256 * 3];
-			palStream->read(palette, 256 * 3);
-
-			for (int i = 0; i < 256 * 3; i++) {
-				palette[i] = (palette[i] * 255) / 63;
+	if (titleArchive.open("TITLE.AP")) {
+		Common::SeekableReadStream *videoStream = titleArchive.getStream(0);
+		if (videoStream) {
+			decoder = new PTFDecoder();
+			if (decoder->loadStream(videoStream)) {
+				decoder->start();
+			} else {
+				delete decoder;
+				decoder = nullptr;
 			}
-
-			g_system->getPaletteManager()->setPalette(palette, 0, 256);
-
-			delete palStream;
 		}
-
-		Common::SeekableReadStream *spriteStream = archive.getStream(5);
-		Item sprite;
-		sprite.load(spriteStream);
-
-		int screenX = (320 - sprite.getWidth()) / 2;
-		int screenY = (200 - sprite.getHeight()) / 2;
-
-		sprite.draw(_screen, screenX, screenY);
-
-	} else {
-		debug(0, "Failed to open INV.AP.");
 	}
 
 	Graphics::FrameLimiter limiter(g_system, 60);
 	while (!shouldQuit()) {
 		while (g_system->getEventManager()->pollEvent(e)) {
+		}
+
+		if (decoder && !decoder->endOfVideo()) {
+			if (decoder->needsUpdate()) {
+				const Graphics::Surface *frame = decoder->decodeNextFrame();
+
+				if (frame) {
+					if (decoder->hasDirtyPalette()) {
+						const byte *pal = decoder->getPalette();
+						g_system->getPaletteManager()->setPalette(pal, 0, 256);
+
+						byte blackIndex = 0;
+						for (int i = 0; i < 256; i++) {
+							if (pal[i * 3] == 0 && pal[i * 3 + 1] == 0 && pal[i * 3 + 2] == 0) {
+								blackIndex = i;
+								break;
+							}
+						}
+
+						g_system->fillScreen(blackIndex);
+					}
+
+					int drawX = (640 - frame->w) / 2;
+					int drawY = (480 - frame->h) / 2;
+
+					g_system->copyRectToScreen(frame->getPixels(), frame->pitch, drawX, drawY, frame->w, frame->h);
+				}
+			}
 		}
 
 		
@@ -119,6 +131,10 @@ Common::Error Murphy3dEngine::run() {
 		limiter.delayBeforeSwap();
 		_screen->update();
 		limiter.startFrame();
+	}
+
+	if (decoder) {
+		delete decoder;
 	}
 
 	return Common::kNoError;
