@@ -35,6 +35,7 @@
 #include "graphics/screen.h"
 
 #include "murphy3d/detection.h"
+#include "murphy3d/renderer.h"
 
 namespace Murphy3d {
 
@@ -49,6 +50,8 @@ protected:
 	Common::Error run() override;
 public:
 	Graphics::Screen *_screen = nullptr;
+	Murphy3d::Renderer *_renderer = nullptr;
+
 public:
 	Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc);
 	~Murphy3dEngine() override;

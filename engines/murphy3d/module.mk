@@ -7,6 +7,13 @@ MODULE_OBJS = \
 	item.o \
 	font.o \
 	ptf_decoder.o \
+	renderer.o \
+	shader.o \
+	sqz.o \
+	texture.o \
+	uakm_map.o \
+	map.o \
+	location.o \
 	metaengine.o
 
 # This module can be built as a plugin

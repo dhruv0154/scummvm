@@ -37,6 +37,11 @@
 #include "engines/util.h"
 #include "graphics/paletteman.h"
 
+#include "murphy3d/renderer.h"
+#include "murphy3d/location.h"
+#include "murphy3d/uakm_map.h"
+#include "murphy3d/math_utils.h"
+
 namespace Murphy3d {
 
 Murphy3dEngine *g_engine;
@@ -48,6 +53,7 @@ Murphy3dEngine::Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc)
 
 Murphy3dEngine::~Murphy3dEngine() {
 	delete _screen;
+	delete _renderer;
 }
 
 uint32 Murphy3dEngine::getFeatures() const {
@@ -59,7 +65,7 @@ Common::String Murphy3dEngine::getGameId() const {
 }
 
 Common::Error Murphy3dEngine::run() {
-	initGraphics(640, 480);
+	initGraphics3d(640, 480);
 	_screen = new Graphics::Screen();
 
 	debug(0, "Murphy 3d engine starting..");
@@ -72,69 +78,72 @@ Common::Error Murphy3dEngine::run() {
 	if (saveSlot != -1)
 		(void)loadGameState(saveSlot);
 
-	// Simple event handling loop
-	Common::Event e;
-	int offset = 0;
+	_renderer = new Renderer();
+	if (!_renderer->init()) {
+		warning("Murphy3d: Failed to initialize OpenGL 3D Renderer!");
+	}
 
-	Archive titleArchive;
-	PTFDecoder *decoder = nullptr;
+	UAKMMap gameMap;
+	if (!gameMap.init()) {
+		warning("Murphy3d: Failed to parse MAP.LZ!");
+	}
 
-	if (titleArchive.open("TITLE.AP")) {
-		Common::SeekableReadStream *videoStream = titleArchive.getStream(0);
-		if (videoStream) {
-			decoder = new PTFDecoder();
-			if (decoder->loadStream(videoStream)) {
-				decoder->start();
-			} else {
-				delete decoder;
-				decoder = nullptr;
-			}
+	Location texOffice;
+	if (texOffice.load("TEXOFF.AP")) {
+		texOffice.buildBuffers(_renderer);
+	}
+
+	Math::Vector3d eyePos(0.0f, 0.0f, 0.0f);
+	Math::Vector3d eyeAt(0.0f, 0.0f, 1.0f);
+	Math::Vector3d upVec(0.0f, 1.0f, 0.0f);
+	Math::Matrix4 viewMat = MathUtils::lookAtLH(eyePos, eyeAt, upVec);
+
+	float fov = 3.141592654f / 4.0f / 0.95f;
+	Math::Matrix4 projMat = MathUtils::perspectiveFovLH(fov, 640.0f / 480.0f, 0.1f, 1000.0f);
+
+	float x = 0.0f, y = 0.0f, z = 0.0f;
+	float yaw = 0.0f, pitch = 0.0f;
+
+	for (int i = 0; i < 64; i++) {
+		MapData *md = gameMap.get(i);
+		if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
+			StartupPosition sp = md->startupPositions[0];
+
+			x = sp.x;
+			y = sp.y + sp.initialEyeLevel;
+			z = sp.z;
+			yaw = sp.angle;
+			pitch = 0.0f;
+			break;
 		}
 	}
+
+	Common::Event e;
 
 	Graphics::FrameLimiter limiter(g_system, 60);
 	while (!shouldQuit()) {
 		while (g_system->getEventManager()->pollEvent(e)) {
-		}
-
-		if (decoder && !decoder->endOfVideo()) {
-			if (decoder->needsUpdate()) {
-				const Graphics::Surface *frame = decoder->decodeNextFrame();
-
-				if (frame) {
-					if (decoder->hasDirtyPalette()) {
-						const byte *pal = decoder->getPalette();
-						g_system->getPaletteManager()->setPalette(pal, 0, 256);
-
-						byte blackIndex = 0;
-						for (int i = 0; i < 256; i++) {
-							if (pal[i * 3] == 0 && pal[i * 3 + 1] == 0 && pal[i * 3 + 2] == 0) {
-								blackIndex = i;
-								break;
-							}
-						}
-
-						g_system->fillScreen(blackIndex);
-					}
-
-					int drawX = (640 - frame->w) / 2;
-					int drawY = (480 - frame->h) / 2;
-
-					g_system->copyRectToScreen(frame->getPixels(), frame->pitch, drawX, drawY, frame->w, frame->h);
-				}
+			if (e.type == Common::EVENT_QUIT || e.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+				return Common::kNoError;
 			}
 		}
 
-		
+		Math::Matrix4 tm = MathUtils::translation(x, y, z);
+		Math::Matrix4 rm2 = MathUtils::rotationY(yaw);
+		Math::Matrix4 rm1 = MathUtils::rotationX(pitch);
+
+		Math::Matrix4 worldMat = tm * rm2 * rm1;
+
+		_renderer->updateMatrices(worldMat, viewMat, projMat);
+
+		_renderer->clear(0.1f, 0.1f, 0.3f);
+		texOffice.render(_renderer);
+
 		// Delay for a bit. All events loops should have a delay
 		// to prevent the system being unduly loaded
 		limiter.delayBeforeSwap();
-		_screen->update();
+		g_system->updateScreen();
 		limiter.startFrame();
-	}
-
-	if (decoder) {
-		delete decoder;
 	}
 
 	return Common::kNoError;
