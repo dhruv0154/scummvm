@@ -31,6 +31,7 @@
 #include "common/system.h"
 #include "common/file.h"
 #include "common/stream.h"
+#include "common/translation.h"
 #include "murphy3d/archive.h"
 #include "murphy3d/item.h"
 #include "murphy3d/ptf_decoder.h"
@@ -38,6 +39,7 @@
 #include "graphics/paletteman.h"
 
 #include "murphy3d/renderer.h"
+#include "murphy3d/player.h"
 #include "murphy3d/location.h"
 #include "murphy3d/uakm_map.h"
 #include "murphy3d/math_utils.h"
@@ -47,7 +49,7 @@ namespace Murphy3d {
 Murphy3dEngine *g_engine;
 
 Murphy3dEngine::Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
-	_gameDescription(gameDesc), _randomSource("Murphy3d") {
+																				   _gameDescription(gameDesc), _randomSource("Murphy3d") {
 	g_engine = this;
 }
 
@@ -114,19 +116,13 @@ Common::Error Murphy3dEngine::run() {
 	float fov = 3.141592654f / 4.0f / 0.95f;
 	Math::Matrix4 projMat = MathUtils::perspectiveFovLH(fov, 640.0f / 480.0f, 0.1f, 1000.0f);
 
-	float x = 0.0f, y = 0.0f, z = 0.0f;
-	float yaw = 0.0f, pitch = 0.0f;
+	Player player;
 
 	for (int i = 0; i < 64; i++) {
 		MapData *md = gameMap.get(i);
 		if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
 			StartupPosition sp = md->startupPositions[0];
-
-			x = -sp.x;
-			y = sp.elevation + sp.initialEyeLevel;
-			z = -sp.z;
-			yaw = sp.angle;
-			pitch = 0.0f;
+			player.spawn(-sp.x, sp.elevation + sp.initialEyeLevel, -sp.z, sp.angle, 0.0f);
 			break;
 		}
 	}
@@ -134,18 +130,52 @@ Common::Error Murphy3dEngine::run() {
 	Common::Event e;
 
 	Graphics::FrameLimiter limiter(g_system, 60);
+
+	bool moveFwd = false, moveBack = false, moveLeft = false, moveRight = false;
+	bool isRunning = false;
+
+	g_system->lockMouse(true);
+
 	while (!shouldQuit()) {
 		while (g_system->getEventManager()->pollEvent(e)) {
 			if (e.type == Common::EVENT_QUIT || e.type == Common::EVENT_RETURN_TO_LAUNCHER) {
 				return Common::kNoError;
 			}
+			if (e.type == Common::EVENT_KEYDOWN || e.type == Common::EVENT_KEYUP) {
+				bool isDown = (e.type == Common::EVENT_KEYDOWN);
+				switch (e.kbd.keycode) {
+				case Common::KEYCODE_w:
+					moveFwd = isDown;
+					break;
+				case Common::KEYCODE_s:
+					moveBack = isDown;
+					break;
+				case Common::KEYCODE_a:
+					moveLeft = isDown;
+					break;
+				case Common::KEYCODE_d:
+					moveRight = isDown;
+					break;
+				case Common::KEYCODE_LSHIFT:
+				case Common::KEYCODE_RSHIFT:
+					isRunning = isDown;
+					break;
+				default:
+					break;
+				}
+
+				player.setMovement(moveFwd, moveBack, moveLeft, moveRight);
+				player.setSpeed(isRunning);
+			}
+			if (e.type == Common::EVENT_MOUSEMOVE) {
+				float deltaYaw = e.relMouse.x * -0.002f;
+				float deltaPitch = e.relMouse.y * -0.002f;
+				player.addRotation(deltaYaw, deltaPitch);
+			}
 		}
 
-		Math::Matrix4 tm = MathUtils::translation(x, y, z);
-		Math::Matrix4 rm2 = MathUtils::rotationY(yaw);
-		Math::Matrix4 rm1 = MathUtils::rotationX(pitch);
-
-		Math::Matrix4 worldMat = tm * rm2 * rm1;
+		player.update();
+		Math::Matrix4 worldMat = player.getWorldMatrix();
 
 		_renderer->updateMatrices(worldMat, viewMat, projMat);
 

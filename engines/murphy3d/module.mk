@@ -14,6 +14,7 @@ MODULE_OBJS = \
 	uakm_map.o \
 	map.o \
 	location.o \
+	player.o \
 	metaengine.o
 
 # This module can be built as a plugin
