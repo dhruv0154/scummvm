@@ -56,6 +56,14 @@ Murphy3dEngine::~Murphy3dEngine() {
 	delete _renderer;
 }
 
+void Murphy3dEngine::initializePath(const Common::FSNode &gamePath) {
+	Engine::initializePath(gamePath);
+	// Chapter 1 is present on disc 2 and contains the initial Tex's Office
+	// location. Support both a copied disc root and a multi-disc directory.
+	SearchMan.addSubDirectoryMatching(gamePath, "MASTERTX/CHAP01", 0, 4);
+	SearchMan.addSubDirectoryMatching(gamePath, "DISK2/MASTERTX/CHAP01", 0, 4);
+}
+
 uint32 Murphy3dEngine::getFeatures() const {
 	return _gameDescription->flags;
 }
@@ -65,6 +73,9 @@ Common::String Murphy3dEngine::getGameId() const {
 }
 
 Common::Error Murphy3dEngine::run() {
+	if (!g_system->hasFeature(OSystem::kFeatureShadersForGame))
+		return Common::Error(Common::kUnknownError, _s("This game requires OpenGL with shaders, which is not supported on your system"));
+
 	initGraphics3d(640, 480);
 	_screen = new Graphics::Screen();
 
@@ -81,6 +92,7 @@ Common::Error Murphy3dEngine::run() {
 	_renderer = new Renderer();
 	if (!_renderer->init()) {
 		warning("Murphy3d: Failed to initialize OpenGL 3D Renderer!");
+		return Common::Error(Common::kUnknownError, _s("Failed to initialize the OpenGL renderer"));
 	}
 
 	UAKMMap gameMap;
@@ -89,9 +101,10 @@ Common::Error Murphy3dEngine::run() {
 	}
 
 	Location texOffice;
-	if (texOffice.load("TEXOFF.AP")) {
-		texOffice.buildBuffers(_renderer);
-	}
+	if (!texOffice.load("TEXOFF.AP"))
+		return Common::Error(Common::kNoGameDataFoundError, _s("Could not load TEXOFF.AP"));
+
+	texOffice.buildBuffers(_renderer);
 
 	Math::Vector3d eyePos(0.0f, 0.0f, 0.0f);
 	Math::Vector3d eyeAt(0.0f, 0.0f, 1.0f);
@@ -109,9 +122,9 @@ Common::Error Murphy3dEngine::run() {
 		if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
 			StartupPosition sp = md->startupPositions[0];
 
-			x = sp.x;
-			y = sp.y + sp.initialEyeLevel;
-			z = sp.z;
+			x = -sp.x;
+			y = sp.elevation + sp.initialEyeLevel;
+			z = -sp.z;
 			yaw = sp.angle;
 			pitch = 0.0f;
 			break;

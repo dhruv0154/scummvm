@@ -55,6 +55,7 @@ public:
 public:
 	Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc);
 	~Murphy3dEngine() override;
+	void initializePath(const Common::FSNode &gamePath) override;
 
 	uint32 getFeatures() const;
 

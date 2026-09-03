@@ -17,12 +17,10 @@ bool ShaderManager::init() {
 	const char *const attributes[] = {
 		"position",
 		"texCoord",
-		"object",
-		"objectParameters",
 		nullptr};
 
 	bool success = _texturedShader->loadFromStrings("texturedShader", getVertexShaderTextured(),
-					getPixelShaderTextured(), attributes);
+					getPixelShaderTextured(), attributes, 120);
 
 	if (!success) {
 		warning("ShaderManager: Failed to compile Textured shader. %s", _texturedShader->getError().c_str());
@@ -30,18 +28,6 @@ bool ShaderManager::init() {
 	}
 
 	_texturedShader->use();
-
-	GLint prog = 0;
-	glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
-
-	GLuint visIdx = glGetUniformBlockIndex(prog, "Visibility");
-	if (visIdx != GL_INVALID_INDEX)
-		glUniformBlockBinding(prog, visIdx, 3);
-
-	GLuint transIdx = glGetUniformBlockIndex(prog, "Translation");
-	if (transIdx != GL_INVALID_INDEX)
-		glUniformBlockBinding(prog, transIdx, 5);
-
 	_texturedShader->setUniform("texture1", 0);
 
 	return true;
@@ -62,8 +48,7 @@ void ShaderManager::setMatrices(const Math::Matrix4 &world, const Math::Matrix4 
 }
 
 const char *ShaderManager::getVertexShaderTextured() {
-	return "#version 330 core\n"
-		   "in vec3 position;\n"
+	return "in vec3 position;\n"
 		   "in vec2 texCoord;\n"
 		   "out vec2 TexCoord;\n"
 		   "uniform mat4 World;\n"
@@ -76,13 +61,12 @@ const char *ShaderManager::getVertexShaderTextured() {
 }
 
 const char *ShaderManager::getPixelShaderTextured() {
-	return "#version 330 core\n"
-		   "in vec2 TexCoord;\n"
-		   "out vec4 color;\n"
+	return "in vec2 TexCoord;\n"
+		   "OUTPUT\n"
 		   "uniform sampler2D texture1;\n"
 		   "void main() {\n"
 		   "    vec4 texColor = texture(texture1, TexCoord);\n"
-		   "    color = texColor;\n"
+		   "    outColor = texColor;\n"
 		   "}\n";
 }
 
