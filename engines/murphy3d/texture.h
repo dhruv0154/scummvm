@@ -9,7 +9,7 @@ namespace Murphy3d {
 class Texture {
 public:
 	Texture(uint16 width, uint16 height, const byte *rgbaData);
-	Texture(uint16 width, uint16 height, const byte *indexedData, const uint32 *palette, bool transparent);
+	Texture(uint16 width, uint16 height, const byte *indexedData, const uint32 *palette, bool transparent, bool rotated);
 	~Texture();
 
 	GLuint getId() const { return _glTextureId; }

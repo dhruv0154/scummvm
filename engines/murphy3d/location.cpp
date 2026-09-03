@@ -43,25 +43,6 @@ void Location::buildBuffers(Renderer *renderer) {
 	}
 
 	debug(0, "Murphy3D Pipeline: Built %d VBOs containing a total of %d vertices.", totalVBOs, totalVertices);
-
-	Std140Vec4 defaultVisibility[4096];
-	for (int i = 0; i < 4096; i++) {
-		defaultVisibility[i].x = 1.0f;
-		defaultVisibility[i].y = 1.0f;
-		defaultVisibility[i].z = 0.0f;
-		defaultVisibility[i].w = 1.0f;
-	}
-	renderer->updateVisibilityBuffer(defaultVisibility, sizeof(defaultVisibility));
-
-
-	Std140Vec4 defaultTranslation[256];
-	for (int i = 0; i < 256; i++) {
-		defaultTranslation[i].x = 0.0f;
-		defaultTranslation[i].y = 0.0f;
-		defaultTranslation[i].z = 0.0f;
-		defaultTranslation[i].w = 0.0f;
-	}
-	renderer->updateTranslationBuffer(defaultTranslation, sizeof(defaultTranslation));
 }
 
 void Location::render(Renderer *renderer) {
@@ -167,6 +148,57 @@ bool Location::loadGeometry(Archive &archive) {
 	uint32 verticeCount = READ_LE_UINT32(p3d2 + 0x00);
 	uint32 objectCount = READ_LE_UINT32(p3d2 + 0x0C);
 
+	Common::Array<bool> objVisible(objectCount);
+	Common::Array<Math::Vector3d> objTranslation(objectCount);
+
+	for (uint32 i = 0; i < objectCount; i++) {
+		uint32 objectOffset = READ_LE_UINT32(p3d2 + 0x30 + (i * 4)) + 0x30;
+		uint32 flags = READ_LE_UINT32(p3d2 + objectOffset);
+		objVisible[i] = ((flags & 0x80000000) == 0);
+		objTranslation[i] = Math::Vector3d(0.0f, 0.0f, 0.0f);
+	}
+
+	Common::SeekableReadStream *animStream = archive.getStream(0);
+	if (animStream) {
+		uint32 animSize = animStream->size();
+		byte *animData = new byte[animSize];
+		animStream->read(animData, animSize);
+
+		uint32 animCount = READ_LE_UINT32(animData + 0);
+		for (uint32 a = 0; a < animCount; a++) {
+			uint32 offset = READ_LE_UINT32(animData + 8 + a * 8);
+			uint32 objId = READ_LE_UINT32(animData + 8 + a * 8 + 4);
+
+			if (offset + 12 <= animSize) {
+				uint32 type = READ_LE_UINT32(animData + offset);
+				uint32 trigger = READ_LE_UINT32(animData + offset + 8);
+
+				if (trigger == 1) {
+					uint32 pA = offset + 12;
+
+					if (type == 2 && pA + 12 <= animSize) {
+						int32 p1 = READ_LE_INT32(animData + pA);
+						int32 p2 = READ_LE_INT32(animData + pA + 4);
+						int32 p3 = READ_LE_INT32(animData + pA + 8);
+						if (objId < objectCount) {
+							objTranslation[objId].x() += (p1 / 65536.0f);
+							objTranslation[objId].y() += (p2 / 65536.0f);
+							objTranslation[objId].z() += (p3 / 65536.0f);
+						}
+					} else if (type == 3 && pA + 4 <= animSize) {
+						int32 objToShow = READ_LE_INT32(animData + pA);
+						if (objId < objectCount)
+							objVisible[objId] = false;
+						if (objToShow >= 0 && objToShow < (int32)objectCount)
+							objVisible[objToShow] = true;
+					}
+				}
+			}
+		}
+		delete[] animData;
+		delete animStream;
+	}
+
 	// 3D points referenced by objects begin after the Object offset table
 	// the offset table is 0x30 + (4 * number of objects)
 	uint32 moff = 0x30 + (objectCount * 4);
@@ -208,21 +240,55 @@ bool Location::loadGeometry(Archive &archive) {
 			subObj.id = READ_LE_UINT32(p3d2 + thisSubOffset + 0x0C);
 			subObj.textureIndex = (int32)READ_LE_UINT32(p3d2 + thisSubOffset + 0x24);
 
+			if (!objVisible[i] || (subObj.flags & 0x80000000) != 0)
+				continue;
+
 			if (points == 1 && (subObj.flags & 4)) {
 				// sprite logic
 				uint32 subSprites = READ_LE_UINT32(p3d2 + thisSubOffset + 0x38);
 				if (subSprites > 0) {
-					// shift point indexes 4 bits to the
-					// right and add object count to get real indexes
-					uint32 pointIndex = READ_LE_UINT32(p3d2 +
-						thisSubOffset + 0x44 + (subSprites * 32)) >> 4;
-					subObj.spriteCenter = _vertices[pointIndex + objectCount];
+					uint32 pointIndex = READ_LE_UINT32(p3d2 + thisSubOffset + 0x44 + (subSprites * 32)) >> 4;
+					Math::Vector3d center = _vertices[pointIndex + objectCount] + objTranslation[i];
 
-					// sprite width/height in 3D world units (16.16 fixed point)
-					subObj.spriteWidth = READ_LE_INT32(p3d2 +
-						thisSubOffset + 0x28) / 65536.0f;
-					subObj.spriteHeight = READ_LE_INT32(p3d2 +
-						thisSubOffset + 0x2C) / 65536.0f;
+					float sww = READ_LE_INT32(p3d2 + thisSubOffset + 0x28) / 65536.0f;
+					float swh = READ_LE_INT32(p3d2 + thisSubOffset + 0x2C) / 65536.0f;
+					float ssw = READ_LE_INT32(p3d2 + thisSubOffset + 0x30) / 65536.0f;
+					float ssh = READ_LE_INT32(p3d2 + thisSubOffset + 0x34) / 65536.0f;
+
+					float tw = 1.0f, th = 1.0f;
+					if (subObj.textureIndex >= 0 && (uint32)subObj.textureIndex < _textures.size() && _textures[subObj.textureIndex]) {
+						tw = (float)_textures[subObj.textureIndex]->getWidth();
+						th = (float)_textures[subObj.textureIndex]->getHeight();
+					}
+
+					for (uint32 ss = 0; ss < subSprites; ss++) {
+						float offsetX = READ_LE_INT32(p3d2 + thisSubOffset + 0x44 + ss * 32) / 65536.0f;
+						float offsetY = READ_LE_INT32(p3d2 + thisSubOffset + 0x48 + ss * 32) / 65536.0f;
+						float texX1 = READ_LE_INT32(p3d2 + thisSubOffset + 0x54 + ss * 32) / 65536.0f;
+						float texY1 = READ_LE_INT32(p3d2 + thisSubOffset + 0x58 + ss * 32) / 65536.0f;
+						float texX2 = 1.0f + (READ_LE_INT32(p3d2 + thisSubOffset + 0x5C + ss * 32) / 65536.0f);
+						float texY2 = 1.0f + (READ_LE_INT32(p3d2 + thisSubOffset + 0x60 + ss * 32) / 65536.0f);
+
+						float OX = (sww * offsetX) / ssw;
+						float OY = (swh * offsetY) / ssh;
+						float W = (sww * (texX2 - texX1)) / ssw;
+						float H = (swh * (texY2 - texY1)) / ssh;
+
+						// build a static 2D quad at the object's 3D coordinates
+						float sy1 = center.y() - H - OY;
+						float sy2 = center.y() - OY;
+						float x1 = center.x() - OX - W;
+						float x2 = center.x() - OX;
+						float z = center.z();
+
+						PolygonPoint p0 = {Math::Vector3d(x1, sy1, z), texX2 / tw, texY2 / th}; // Bottom Left
+						PolygonPoint p1 = {Math::Vector3d(x2, sy1, z), texX1 / tw, texY2 / th}; // Bottom Right
+						PolygonPoint p2 = {Math::Vector3d(x2, sy2, z), texX1 / tw, texY1 / th}; // Top Right
+						PolygonPoint p3 = {Math::Vector3d(x1, sy2, z), texX2 / tw, texY1 / th}; // Top Left
+
+						addTriangleToGroup(subObj.textureIndex, i, j, subObj.flags, p0, p2, p1);
+						addTriangleToGroup(subObj.textureIndex, i, j, subObj.flags, p0, p3, p2);
+					}
 				}
 			} else if (points > 2 && (subObj.flags & 2)) {
 
@@ -245,7 +311,7 @@ bool Location::loadGeometry(Archive &archive) {
 					float fu = READ_LE_INT32(p3d2 + uvOffset + (p * 8)) / 65536.0f;
 					float fv = READ_LE_INT32(p3d2 + uvOffset + 4 + (p * 8)) / 65536.0f;
 
-					polyPoints[p].pos = _vertices[pix + objectCount];
+					polyPoints[p].pos = _vertices[pix + objectCount] + objTranslation[i];
 
 					// divide by texture width/height to get U/V
 					// 0x00000800 indicates single colour mapping
@@ -258,11 +324,47 @@ bool Location::loadGeometry(Archive &archive) {
 					}
 				}
 
-				for (uint32 p = 2; p < points; p++) {
-					PolygonPoint p0 = polyPoints[0];
-					PolygonPoint p1 = polyPoints[p - 1];
-					PolygonPoint p2 = polyPoints[p];
-					addTriangleToGroup(subObj.textureIndex, i, j, subObj.flags, p0, p2, p1);
+				int startp = 0;
+				int pointsLeft = points;
+				int failsafe = pointsLeft * 3;
+
+				while (pointsLeft > 2 && failsafe > 0) {
+					int prev1 = startp - 1;
+					if (prev1 < 0)
+						prev1 += pointsLeft;
+					int prev2 = startp - 2;
+					if (prev2 < 0)
+						prev2 += pointsLeft;
+
+					PolygonPoint p0 = polyPoints[startp];
+					PolygonPoint p1 = polyPoints[prev1];
+					PolygonPoint p2 = polyPoints[prev2];
+
+					Math::Vector3d v1 = p0.pos - p1.pos;
+					Math::Vector3d v2 = p1.pos - p2.pos;
+
+					float len1 = v1.length();
+					float len2 = v2.length();
+					if (len1 > 0.0f)
+						v1.normalize();
+					if (len2 > 0.0f)
+						v2.normalize();
+
+					if (fabs(v1.x() - v2.x()) > 0.001f ||
+						fabs(v1.y() - v2.y()) > 0.001f ||
+						fabs(v1.z() - v2.z()) > 0.001f) {
+
+						addTriangleToGroup(subObj.textureIndex, i, j, subObj.flags, p0, p2, p1);
+						polyPoints.remove_at(prev1);
+						pointsLeft--;
+						failsafe = pointsLeft * 3;
+					} else {
+						failsafe--;
+					}
+
+					startp++;
+					if (startp >= pointsLeft && pointsLeft > 0)
+						startp -= pointsLeft;
 				}
 			}
 		}
@@ -304,9 +406,11 @@ bool Location::loadTextures(Archive &archive) {
 	uint32 rgbaPalette[256];
 	byte *palBytes = (byte *)rgbaPalette;
 	for (int i = 0; i < 256; i++) {
-		palBytes[i * 4 + 0] = (_palette[i * 3 + 0] * 255) / 63;
-		palBytes[i * 4 + 1] = (_palette[i * 3 + 1] * 255) / 63;
-		palBytes[i * 4 + 2] = (_palette[i * 3 + 2] * 255) / 63;
+		// Unlike the VGA palettes used by the 2D resources, location
+		// palettes already contain full-range 8-bit RGB components.
+		palBytes[i * 4 + 0] = _palette[i * 3 + 0];
+		palBytes[i * 4 + 1] = _palette[i * 3 + 1];
+		palBytes[i * 4 + 2] = _palette[i * 3 + 2];
 		palBytes[i * 4 + 3] = 255;
 	}
 
@@ -326,8 +430,9 @@ bool Location::loadTextures(Archive &archive) {
 			uint32 scanOffset = texPtr + (4 * h);
 
 			// the next width * height bytes make up the texture
+			bool isRotated = (type == 1);
 			byte *scanData = tex + scanOffset;
-			_textures[t] = new Texture(w, h, scanData, rgbaPalette, true);
+			_textures[t] = new Texture(w, h, scanData, rgbaPalette, true, isRotated);
 
 			texPtr = scanOffset + (w * h);
 
