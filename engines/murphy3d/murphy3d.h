@@ -36,8 +36,17 @@
 
 #include "murphy3d/detection.h"
 #include "murphy3d/renderer.h"
+#include "murphy3d/font.h"
+#include "murphy3d/main_menu.h"
+#include "murphy3d/location.h"
+#include "murphy3d/player.h"
 
 namespace Murphy3d {
+
+enum EngineState {
+	kStateMainMenu,
+	kStateInGame
+};
 
 struct Murphy3dGameDescription;
 
@@ -45,12 +54,27 @@ class Murphy3dEngine : public Engine {
 private:
 	const ADGameDescription *_gameDescription;
 	Common::RandomSource _randomSource;
+
+	EngineState _state;
+	Font *_font;
+	MainMenu *_mainMenu;
+
+	Location *_currentLocation;
+	Player *_player;
+
 protected:
 	// Engine APIs
 	Common::Error run() override;
 public:
 	Graphics::Screen *_screen = nullptr;
 	Murphy3d::Renderer *_renderer = nullptr;
+
+	void startNewGame();
+	void resumeGame();
+	void showMainMenu();
+	void quitGame() {
+		Engine::quitGame();
+	}
 
 public:
 	Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc);

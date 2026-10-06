@@ -4,7 +4,7 @@
 #include "common/scummsys.h"
 #include "common/stream.h"
 #include "common/str.h"
-#include "graphics/screen.h"
+#include "murphy3d/texture.h"
 
 namespace Murphy3d {
 class Font {
@@ -12,23 +12,25 @@ public:
 	Font();
 	~Font();
 
-	bool load(Common::SeekableReadStream *stream);
+	bool load(const Common::String &fileName);
 
-	void draw(Graphics::Screen *screen, int x, int y, const Common::String &text, const byte *colorMap);
+	float getPixelWidth(char ch) const;
+	float getPixelWidth(const Common::String &text) const;
 
-	int measureString(const Common::String &text, int horizontalAdjustment = 0) const;
-	int getHeight() { return _fontHeight; }
+	Texture *getTexture() const { return _texture; }
+	float getHeight() const { return _height; }
+	float getY1() const { return _y1; }
+	float getY2() const { return _y2; }
 
-	int _bitsPerPixel;
+	float getWidthArray(int index) const { return _widths[index]; }
+
 private:
-	byte *_fontData;
-	uint32 _fontDataSize;
+	Texture *_texture;
+	float _widths[224];
+	float _height;
+	float _y1;
+	float _y2;
 
-	int _fontHeight;
-
-	byte *_fontMap[256];
-
-	int readBits(const byte *data, int bitsPerPixel, int &bitOffset) const;
 };
 
 } // End of namespace Murphy3d

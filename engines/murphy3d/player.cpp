@@ -1,6 +1,5 @@
 #include "murphy3d/player.h"
 #include "murphy3d/math_utils.h"
-#include <math.h>
 
 namespace Murphy3d {
 

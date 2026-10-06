@@ -10,16 +10,9 @@ struct Std140Vec4 {
 	float x, y, z, w;
 };
 
-struct TEXTURED_VERTEX_ORTHO {
-	float x, y, z; // position
-	float u, v; // texture
-};
-
 struct TEXTURED_VERTEX {
 	float x, y, z; // position
 	float u, v; // texture
-	float objX, objY; // object index & subIndex
-	float pX, pY, pZ, pW; // object parameters
 };
 
 struct MULTICOLOURED_FONT_VERTEX {
@@ -63,14 +56,6 @@ struct TexFontBufferType {
 	Std140Vec4 colour2;
 	Std140Vec4 colour3;
 	Std140Vec4 colour4;
-};
-
-struct VisibilityBufferType {
-	Std140Vec4 visibility[4096];
-};
-
-struct TranslationBufferType {
-	Std140Vec4 translation[256];
 };
 
 } // End of namespace Murphy3d

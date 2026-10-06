@@ -37,6 +37,7 @@
 #include "murphy3d/ptf_decoder.h"
 #include "engines/util.h"
 #include "graphics/paletteman.h"
+#include "graphics/cursorman.h"
 
 #include "murphy3d/renderer.h"
 #include "murphy3d/player.h"
@@ -48,14 +49,46 @@ namespace Murphy3d {
 
 Murphy3dEngine *g_engine;
 
-Murphy3dEngine::Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
-																				   _gameDescription(gameDesc), _randomSource("Murphy3d") {
+Murphy3dEngine::Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc)
+	: Engine(syst), _gameDescription(gameDesc), _randomSource("Murphy3d"),
+	  _state(kStateMainMenu), _font(nullptr), _mainMenu(nullptr),
+	  _currentLocation(nullptr), _player(nullptr) {
 	g_engine = this;
 }
 
 Murphy3dEngine::~Murphy3dEngine() {
+	delete _mainMenu;
+	delete _font;
+	delete _currentLocation;
+	delete _player;
 	delete _screen;
 	delete _renderer;
+}
+
+void Murphy3dEngine::startNewGame() {
+	_state = kStateInGame;
+
+	if (_mainMenu) {
+		_mainMenu->enableResume(true);
+		_mainMenu->enableSave(true);
+	}
+
+	g_system->lockMouse(true);
+	CursorMan.showMouse(false);
+}
+
+void Murphy3dEngine::resumeGame() {
+	if (_currentLocation) {
+		_state = kStateInGame;
+		g_system->lockMouse(true);
+		CursorMan.showMouse(false);
+	}
+}
+
+void Murphy3dEngine::showMainMenu() {
+	_state = kStateMainMenu;
+	g_system->lockMouse(false);
+	CursorMan.showMouse(true);
 }
 
 void Murphy3dEngine::initializePath(const Common::FSNode &gamePath) {
@@ -97,16 +130,22 @@ Common::Error Murphy3dEngine::run() {
 		return Common::Error(Common::kUnknownError, _s("Failed to initialize the OpenGL renderer"));
 	}
 
+	_font = new Font();
+	_font->load("UAKMFont.png");
+
+	_mainMenu = new MainMenu(_font);
+	_mainMenu->init();
+
 	UAKMMap gameMap;
 	if (!gameMap.init()) {
 		warning("Murphy3d: Failed to parse MAP.LZ!");
 	}
 
-	Location texOffice;
-	if (!texOffice.load("TEXOFF.AP"))
-		return Common::Error(Common::kNoGameDataFoundError, _s("Could not load TEXOFF.AP"));
+	_currentLocation = new Location();
+	if (!_currentLocation->load("TEXOFF.AP"))
+		return Common::Error(Common::kNoGameDataFoundError, _s("Could not load Location"));
 
-	texOffice.buildBuffers(_renderer);
+	_currentLocation->buildBuffers(_renderer);
 
 	Math::Vector3d eyePos(0.0f, 0.0f, 0.0f);
 	Math::Vector3d eyeAt(0.0f, 0.0f, 1.0f);
@@ -116,13 +155,13 @@ Common::Error Murphy3dEngine::run() {
 	float fov = 3.141592654f / 4.0f / 0.95f;
 	Math::Matrix4 projMat = MathUtils::perspectiveFovLH(fov, 640.0f / 480.0f, 0.1f, 1000.0f);
 
-	Player player;
+	_player = new Player();
 
 	for (int i = 0; i < 64; i++) {
 		MapData *md = gameMap.get(i);
 		if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
 			StartupPosition sp = md->startupPositions[0];
-			player.spawn(-sp.x, sp.elevation + sp.initialEyeLevel, -sp.z, sp.angle, 0.0f);
+			_player->spawn(-sp.x, sp.elevation + sp.initialEyeLevel, -sp.z, sp.angle, 0.0f);
 			break;
 		}
 	}
@@ -134,53 +173,73 @@ Common::Error Murphy3dEngine::run() {
 	bool moveFwd = false, moveBack = false, moveLeft = false, moveRight = false;
 	bool isRunning = false;
 
-	g_system->lockMouse(true);
+	showMainMenu();
 
 	while (!shouldQuit()) {
 		while (g_system->getEventManager()->pollEvent(e)) {
 			if (e.type == Common::EVENT_QUIT || e.type == Common::EVENT_RETURN_TO_LAUNCHER) {
 				return Common::kNoError;
 			}
-			if (e.type == Common::EVENT_KEYDOWN || e.type == Common::EVENT_KEYUP) {
-				bool isDown = (e.type == Common::EVENT_KEYDOWN);
-				switch (e.kbd.keycode) {
-				case Common::KEYCODE_w:
-					moveFwd = isDown;
-					break;
-				case Common::KEYCODE_s:
-					moveBack = isDown;
-					break;
-				case Common::KEYCODE_a:
-					moveLeft = isDown;
-					break;
-				case Common::KEYCODE_d:
-					moveRight = isDown;
-					break;
-				case Common::KEYCODE_LSHIFT:
-				case Common::KEYCODE_RSHIFT:
-					isRunning = isDown;
-					break;
-				default:
-					break;
+
+			if (_state == kStateMainMenu) {
+				if (e.type == Common::EVENT_MOUSEMOVE) {
+					_mainMenu->handleMouseMove(e.mouse.x, e.mouse.y);
+				} else if (e.type == Common::EVENT_LBUTTONDOWN) {
+					_mainMenu->handleMouseDown(e.mouse.x, e.mouse.y);
+				} else if (e.type == Common::EVENT_LBUTTONUP) {
+					_mainMenu->handleMouseUp(e.mouse.x, e.mouse.y);
+				}
+				continue;
+			} else if (_state == kStateInGame) {
+				if (e.type == Common::EVENT_KEYDOWN && e.kbd.keycode == Common::KEYCODE_ESCAPE) {
+					showMainMenu();
+					continue;
 				}
 
-				player.setMovement(moveFwd, moveBack, moveLeft, moveRight);
-				player.setSpeed(isRunning);
-			}
-			if (e.type == Common::EVENT_MOUSEMOVE) {
-				float deltaYaw = e.relMouse.x * -0.002f;
-				float deltaPitch = e.relMouse.y * -0.002f;
-				player.addRotation(deltaYaw, deltaPitch);
+				if (e.type == Common::EVENT_KEYDOWN || e.type == Common::EVENT_KEYUP) {
+					bool isDown = (e.type == Common::EVENT_KEYDOWN);
+					switch (e.kbd.keycode) {
+					case Common::KEYCODE_w:
+						moveFwd = isDown;
+						break;
+					case Common::KEYCODE_s:
+						moveBack = isDown;
+						break;
+					case Common::KEYCODE_a:
+						moveLeft = isDown;
+						break;
+					case Common::KEYCODE_d:
+						moveRight = isDown;
+						break;
+					case Common::KEYCODE_LSHIFT:
+					case Common::KEYCODE_RSHIFT:
+						isRunning = isDown;
+						break;
+					default:
+						break;
+					}
+
+					_player->setMovement(moveFwd, moveBack, moveLeft, moveRight);
+					_player->setSpeed(isRunning);
+				} else if (e.type == Common::EVENT_MOUSEMOVE) {
+					float deltaYaw = e.relMouse.x * -0.002f;
+					float deltaPitch = e.relMouse.y * -0.002f;
+					_player->addRotation(deltaYaw, deltaPitch);
+				}
 			}
 		}
 
-		player.update();
-		Math::Matrix4 worldMat = player.getWorldMatrix();
-
-		_renderer->updateMatrices(worldMat, viewMat, projMat);
-
 		_renderer->clear(0.1f, 0.1f, 0.3f);
-		texOffice.render(_renderer);
+
+		if (_state == kStateMainMenu) {
+			_mainMenu->render(_renderer);
+		} else if (_state == kStateInGame) {
+			_player->update();
+			Math::Matrix4 worldMat = _player->getWorldMatrix();
+
+			_renderer->updateMatrices(worldMat, viewMat, projMat);
+			_currentLocation->render(_renderer);
+		}
 
 		// Delay for a bit. All events loops should have a delay
 		// to prevent the system being unduly loaded

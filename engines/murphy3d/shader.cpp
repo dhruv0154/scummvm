@@ -4,11 +4,12 @@
 
 namespace Murphy3d {
 
-ShaderManager::ShaderManager() : _texturedShader(nullptr) {
+ShaderManager::ShaderManager() : _texturedShader(nullptr), _uiFontShader(nullptr) {
 }
 
 ShaderManager::~ShaderManager() {
 	delete _texturedShader;
+	delete _uiFontShader;
 }
 
 bool ShaderManager::init() {
@@ -29,6 +30,25 @@ bool ShaderManager::init() {
 
 	_texturedShader->use();
 	_texturedShader->setUniform("texture1", 0);
+
+	_uiFontShader = new OpenGL::Shader();
+
+	const char *const uiAttributes[] = {
+		"position",
+		"texCoord",
+		"color",
+		nullptr};
+
+	success = _uiFontShader->loadFromStrings("uiFontShader", getVertexShaderUIFont(),
+				getPixelShaderUIFont(), uiAttributes, 120);
+
+	if (!success) {
+		warning("ShaderManager: Failed to compile UI Font shader. %s", _uiFontShader->getError().c_str());
+		return false;
+	}
+
+	_uiFontShader->use();
+	_uiFontShader->setUniform("texture1", 0);
 
 	return true;
 }
@@ -67,6 +87,37 @@ const char *ShaderManager::getPixelShaderTextured() {
 		   "void main() {\n"
 		   "    vec4 texColor = texture(texture1, TexCoord);\n"
 		   "    outColor = texColor;\n"
+		   "}\n";
+}
+
+const char *ShaderManager::getVertexShaderUIFont() {
+	return "in vec3 position;\n"
+		   "in vec2 texCoord;\n"
+		   "in vec4 color;\n"
+		   "out vec2 TexCoord;\n"
+		   "out vec4 VertColor;\n"
+		   "uniform mat4 World;\n"
+		   "uniform mat4 View;\n"
+		   "uniform mat4 Projection;\n"
+		   "void main() {\n"
+		   "    gl_Position = Projection * View * World * vec4(position, 1.0);\n"
+		   "    TexCoord = texCoord;\n"
+		   "    VertColor = color;\n"
+		   "}\n";
+}
+
+const char *ShaderManager::getPixelShaderUIFont() {
+	return "in vec2 TexCoord;\n"
+		   "in vec4 VertColor;\n"
+		   "OUTPUT\n"
+		   "uniform sampler2D texture1;\n"
+		   "void main() {\n"
+		   "    vec4 l1 = texture(texture1, vec2(TexCoord.x, TexCoord.y - 0.50));\n" // top half
+		   "    vec4 l2 = texture(texture1, vec2(TexCoord.x, TexCoord.y - 0.25));\n" // bottom half
+		   "    vec4 topBase = l1.a * VertColor;\n"
+		   "    vec4 botBase = l2.a * VertColor;\n"
+		   "    outColor = topBase + botBase;\n"
+		   "    if (outColor.a < 0.1) discard;\n"
 		   "}\n";
 }
 
