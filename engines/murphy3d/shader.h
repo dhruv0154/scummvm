@@ -16,12 +16,17 @@ public:
 	void setMatrices(const Math::Matrix4 &world, const Math::Matrix4 &view, const Math::Matrix4 &proj);
 
 	OpenGL::Shader *getTexturedShader() const { return _texturedShader; }
+	OpenGL::Shader *getUIFontShader() const { return _uiFontShader; }
 
 private:
 	OpenGL::Shader *_texturedShader;
-
+	OpenGL::Shader *_uiFontShader;
+		
 	const char *getVertexShaderTextured();
 	const char *getPixelShaderTextured();
+
+	const char *getVertexShaderUIFont();
+	const char *getPixelShaderUIFont();
 };
 
 } // End of namespace Murphy3d

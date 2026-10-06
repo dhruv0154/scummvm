@@ -97,7 +97,7 @@ bool Location::load(const Common::String &filename) {
 	return true;
 }
 
-void Location::addTriangleToGroup(int32 textureIndex, uint32 objIdx, uint32 subObjIdx, uint32 flags,
+void Location::addTriangleToGroup(int32 textureIndex, uint32 flags,
 								  const PolygonPoint &p1, const PolygonPoint &p2, const PolygonPoint &p3) {
 	if (textureIndex < 0 || (uint32)textureIndex >= _textureGroups.size())
 		return;
@@ -105,9 +105,9 @@ void Location::addTriangleToGroup(int32 textureIndex, uint32 objIdx, uint32 subO
 	// shaderParameter is 1.0f if transparent, 0.0f if solid
 	float shaderParam = (flags & 0x00000010) ? 1.0f : 0.0f;
 
-	TEXTURED_VERTEX v1 = {p1.pos.x(), p1.pos.y(), p1.pos.z(), p1.u, p1.v, (float)objIdx, (float)subObjIdx, shaderParam, 0, 0, 0};
-	TEXTURED_VERTEX v2 = {p2.pos.x(), p2.pos.y(), p2.pos.z(), p2.u, p2.v, (float)objIdx, (float)subObjIdx, shaderParam, 0, 0, 0};
-	TEXTURED_VERTEX v3 = {p3.pos.x(), p3.pos.y(), p3.pos.z(), p3.u, p3.v, (float)objIdx, (float)subObjIdx, shaderParam, 0, 0, 0};
+	TEXTURED_VERTEX v1 = {p1.pos.x(), p1.pos.y(), p1.pos.z(), p1.u, p1.v};
+	TEXTURED_VERTEX v2 = {p2.pos.x(), p2.pos.y(), p2.pos.z(), p2.u, p2.v};
+	TEXTURED_VERTEX v3 = {p3.pos.x(), p3.pos.y(), p3.pos.z(), p3.u, p3.v};
 
 	_textureGroups[textureIndex].textureIndex = textureIndex;
 	_textureGroups[textureIndex].vertices.push_back(v1);
@@ -286,8 +286,8 @@ bool Location::loadGeometry(Archive &archive) {
 						PolygonPoint p2 = {Math::Vector3d(x2, sy2, z), texX1 / tw, texY1 / th}; // Top Right
 						PolygonPoint p3 = {Math::Vector3d(x1, sy2, z), texX2 / tw, texY1 / th}; // Top Left
 
-						addTriangleToGroup(subObj.textureIndex, i, j, subObj.flags, p0, p2, p1);
-						addTriangleToGroup(subObj.textureIndex, i, j, subObj.flags, p0, p3, p2);
+						addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p2, p1);
+						addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p3, p2);
 					}
 				}
 			} else if (points > 2 && (subObj.flags & 2)) {
@@ -354,7 +354,7 @@ bool Location::loadGeometry(Archive &archive) {
 						fabs(v1.y() - v2.y()) > 0.001f ||
 						fabs(v1.z() - v2.z()) > 0.001f) {
 
-						addTriangleToGroup(subObj.textureIndex, i, j, subObj.flags, p0, p2, p1);
+						addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p2, p1);
 						polyPoints.remove_at(prev1);
 						pointsLeft--;
 						failsafe = pointsLeft * 3;

@@ -2,6 +2,7 @@
 #include "murphy3d/renderer.h"
 #include "murphy3d/shader.h"
 #include "murphy3d/shader_structs.h"
+#include "murphy3d/math_utils.h"
 
 namespace Murphy3d {
 
@@ -44,7 +45,7 @@ void Renderer::clear(float r, float g, float b) {
 	glViewport(0, 0, g_system->getWidth(), g_system->getHeight());
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
-	glDepthMask(GL_TRUE);  
+	glDepthMask(GL_TRUE);
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -76,6 +77,7 @@ GLuint Renderer::createIndexBuffer(const void *data, uint32 size, bool dynamic) 
 void Renderer::updateBufferData(GLuint bufferId, const void *data, uint32 size, uint32 offset) {
 	glBindBuffer(GL_ARRAY_BUFFER, bufferId);
 	glBufferSubData(GL_ARRAY_BUFFER, offset, size, data);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void Renderer::deleteBuffer(GLuint bufferId) {
@@ -105,6 +107,60 @@ void Renderer::drawTexturedTriangles(GLuint vbo, uint32 vertexCount, uint32 star
 	shader->use(true);
 
 	glDrawArrays(GL_TRIANGLES, startVertex, vertexCount);
+	shader->unbind();
+}
+
+void Renderer::bindUIState(OpenGL::Shader *shader, GLuint textureId, const Math::Matrix4 &worldMat) {
+	Math::Vector3d eyePos(320.0f, -240.0f, -10.0f);
+	Math::Vector3d eyeAt(320.0f, -240.0f, 1.0f);
+	Math::Vector3d upVec(0.0f, 1.0f, 0.0f);
+
+	Math::Matrix4 viewMat = MathUtils::lookAtLH(eyePos, eyeAt, upVec);
+	Math::Matrix4 orthoMat = MathUtils::orthographicLH(640.0f, 480.0f, 0.1f, 1000.0f);
+
+	shader->setUniform("World", worldMat);
+	shader->setUniform("View", viewMat);
+	shader->setUniform("Projection", orthoMat);
+
+	bindTexture(textureId, 0);
+}
+
+void Renderer::drawUI(GLuint vbo, uint32 vertexCount, GLuint textureId, const Math::Matrix4 &worldMat) {
+	if (!_shaderManager)
+		return;
+
+	glDisable(GL_DEPTH_TEST);
+	OpenGL::Shader *shader = _shaderManager->getUIFontShader();
+	bindUIState(shader, textureId, worldMat);
+
+	GLsizei stride = sizeof(MULTICOLOURED_FONT_VERTEX);
+	shader->enableVertexAttribute("position", vbo, 3, GL_FLOAT, GL_FALSE, stride, 0);
+	shader->enableVertexAttribute("texCoord", vbo, 2, GL_FLOAT, GL_FALSE, stride, 3 * sizeof(float));
+	shader->enableVertexAttribute("color", vbo, 4, GL_FLOAT, GL_FALSE, stride, 5 * sizeof(float));
+	shader->use(true);
+
+	glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+	shader->unbind();
+	glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::drawUITextured(GLuint vbo, uint32 vertexCount, GLuint textureId, const Math::Matrix4 &worldMat) {
+	if (!_shaderManager)
+		return;
+
+	glDisable(GL_DEPTH_TEST);
+	OpenGL::Shader *shader = _shaderManager->getTexturedShader();
+	bindUIState(shader, textureId, worldMat);
+
+	GLsizei stride = sizeof(TEXTURED_VERTEX);
+	shader->enableVertexAttribute("position", vbo, 3, GL_FLOAT, GL_FALSE, stride, 0);
+	shader->enableVertexAttribute("texCoord", vbo, 2, GL_FLOAT, GL_FALSE, stride, 3 * sizeof(float));
+
+	shader->use(true);
+	glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+
+	shader->unbind();
+	glEnable(GL_DEPTH_TEST);
 }
 
 } // End of namespace Murphy3d

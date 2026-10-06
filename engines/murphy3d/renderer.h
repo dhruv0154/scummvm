@@ -6,6 +6,7 @@
 
 #include "graphics/opengl/context.h"
 #include "graphics/opengl/system_headers.h"
+#include "murphy3d/shader.h"
 
 namespace Murphy3d {
 
@@ -28,9 +29,13 @@ public:
 	void bindTexture(GLuint textureId, uint8 slot = 0);
 	void updateMatrices(const Math::Matrix4 &world, const Math::Matrix4 &view, const Math::Matrix4 &proj);
 	void drawTexturedTriangles(GLuint vbo, uint32 vertexCount, uint32 startVertex = 0);
+	void drawUI(GLuint vbo, uint32 vertexCount, GLuint textureId, const Math::Matrix4 &worldMat);
+	void drawUITextured(GLuint vbo, uint32 vertexCount, GLuint textureId, const Math::Matrix4 &worldMat);
 
 private:
 	ShaderManager *_shaderManager;
+
+	void bindUIState(OpenGL::Shader *shader, GLuint textureId, const Math::Matrix4 &worldMat);
 };
 
 } // End of namespace Murphy3d

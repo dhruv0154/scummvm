@@ -5,7 +5,7 @@
 #include "math/matrix4.h"
 #include "math/vector3d.h"
 #include "math/angle.h"
-#include <math.h>
+
 
 namespace Murphy3d {
 namespace MathUtils {

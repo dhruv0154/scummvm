@@ -67,8 +67,7 @@ private:
 	bool loadPalette(Archive &archive);
 	bool loadGeometry(Archive &archive);
 
-	void addTriangleToGroup(int32 textureIndex, uint32 objIdx, uint32 subObjIdx, uint32 flags,
-							const PolygonPoint &p1, const PolygonPoint &p2, const PolygonPoint &p3);
+	void addTriangleToGroup(int32 textureIndex, uint32 flags, const PolygonPoint &p1, const PolygonPoint &p2, const PolygonPoint &p3);
 };
 
 } // End of namespace Murphy3d

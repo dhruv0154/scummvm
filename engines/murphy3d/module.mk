@@ -15,6 +15,11 @@ MODULE_OBJS = \
 	map.o \
 	location.o \
 	player.o \
+	main_menu.o \
+	text.o \
+	control.o \
+	button.o \
+	label.o \
 	metaengine.o
 
 # This module can be built as a plugin
