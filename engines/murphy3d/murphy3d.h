@@ -40,6 +40,7 @@
 #include "murphy3d/main_menu.h"
 #include "murphy3d/location.h"
 #include "murphy3d/player.h"
+#include "murphy3d/animated_cursor.h"
 
 namespace Murphy3d {
 
@@ -62,6 +63,10 @@ private:
 	Location *_currentLocation;
 	Player *_player;
 
+	AnimatedCursor _cursors[(int)CursorType::kSpecial + 1];
+	CursorType _activeCursor;
+	bool loadCursors();
+
 protected:
 	// Engine APIs
 	Common::Error run() override;
@@ -75,6 +80,9 @@ public:
 	void quitGame() {
 		Engine::quitGame();
 	}
+
+	void setActiveCursor(CursorType type);
+	AnimatedCursor *getCursor(CursorType type);
 
 public:
 	Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc);
