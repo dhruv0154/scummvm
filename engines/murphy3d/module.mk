@@ -20,6 +20,7 @@ MODULE_OBJS = \
 	control.o \
 	button.o \
 	label.o \
+	animated_cursor.o \
 	metaengine.o
 
 # This module can be built as a plugin

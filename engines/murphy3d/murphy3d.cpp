@@ -52,7 +52,7 @@ Murphy3dEngine *g_engine;
 Murphy3dEngine::Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	: Engine(syst), _gameDescription(gameDesc), _randomSource("Murphy3d"),
 	  _state(kStateMainMenu), _font(nullptr), _mainMenu(nullptr),
-	  _currentLocation(nullptr), _player(nullptr) {
+	  _currentLocation(nullptr), _player(nullptr), _activeCursor(CursorType::kArrow) {
 	g_engine = this;
 }
 
@@ -89,6 +89,132 @@ void Murphy3dEngine::showMainMenu() {
 	_state = kStateMainMenu;
 	g_system->lockMouse(false);
 	CursorMan.showMouse(true);
+}
+
+void Murphy3dEngine::setActiveCursor(CursorType type) {
+	if (type < CursorType::kArrow || type > CursorType::kSpecial)
+		return;
+
+	_activeCursor = type;
+	int idx = (int)_activeCursor;
+
+	if (_cursors[idx].hasIcons()) {
+		_cursors[idx].applyToCursorMan();
+	} else {
+		CursorMan.showMouse(true);
+	}
+}
+
+AnimatedCursor *Murphy3dEngine::getCursor(CursorType type) {
+	int idx = (int)type;
+	if (idx >= 0 && idx <= (int)CursorType::kSpecial)
+		return &_cursors[idx];
+	return nullptr;
+}
+
+bool Murphy3dEngine::loadCursors() {
+	Archive gfxArchive;
+	if (!gfxArchive.open("GRAPHICS.AP")) {
+		warning("Murphy3d: Failed to open GRAPHICS.AP for cursor palette");
+		return false;
+	}
+
+	Common::SeekableReadStream *palStream = gfxArchive.getStream(0);
+	if (!palStream)
+		return false;
+
+	byte basePalette[768];
+	palStream->read(basePalette, 768);
+	delete palStream;
+	gfxArchive.close();
+
+	Common::File iconFile;
+	if (!iconFile.open("ICONS.LZ")) {
+		warning("Murphy3d: Failed to open ICONS.LZ");
+		return false;
+	}
+
+	uint32 fileSize = iconFile.size();
+	byte *compressedData = new byte[fileSize];
+	iconFile.read(compressedData, fileSize);
+	iconFile.close();
+
+	byte *iconsData = nullptr;
+	uint32 iconsSize = Common::decompressAccessDBE(compressedData, &iconsData);
+	delete[] compressedData;
+
+	if (!iconsData || iconsSize == 0)
+		return false;
+
+	uint16 cursorCount = READ_LE_UINT16(iconsData);
+	Graphics::PixelFormat rgbaFormat(4, 8, 8, 8, 8, 0, 8, 16, 24);
+
+	for (int i = 0; i < (cursorCount - 2) && i < 13; i++) {
+		uint32 offset1 = READ_LE_UINT32(iconsData + 2 + i * 4);
+		uint32 offset2 = READ_LE_UINT32(iconsData + 6 + i * 4);
+		uint32 size = offset2 - offset1;
+
+		if (size <= 1)
+			continue;
+
+		byte *pIcon = iconsData + offset1;
+		byte *pEnd = pIcon + size;
+
+		// each cursor provides 7 custom colors
+		byte localPalette[768];
+		memcpy(localPalette, basePalette, 768);
+		memcpy(localPalette + 3, pIcon, 21);
+		pIcon += 21;
+
+		Common::Array<Graphics::Surface *> frames;
+
+		while (pIcon < pEnd) {
+			uint16 w = READ_LE_UINT16(pIcon + 2);
+			uint16 h = READ_LE_UINT16(pIcon + 4);
+			uint32 dataSize = READ_LE_UINT32(pIcon + 9);
+
+			Graphics::Surface *surf = new Graphics::Surface();
+			surf->create(w, h, rgbaFormat);
+			memset(surf->getPixels(), 0, w * h * 4); // transparent background
+
+			byte *pSrc = pIcon + 16;
+			for (int y = 0; y < h; y++) {
+				uint16 offsetX = READ_LE_UINT16(pSrc);
+				uint16 length = READ_LE_UINT16(pSrc + 2);
+
+				for (int x = 0; x < length; x++) {
+					byte colorIndex = pSrc[4 + x];
+					if (colorIndex > 0 && (offsetX + x) < w) {
+						byte r = (localPalette[colorIndex * 3 + 0] * 255) / 63;
+						byte g = (localPalette[colorIndex * 3 + 1] * 255) / 63;
+						byte b = (localPalette[colorIndex * 3 + 2] * 255) / 63;
+
+						byte *pixel = (byte *)surf->getBasePtr(offsetX + x, y);
+						pixel[0] = r;
+						pixel[1] = g;
+						pixel[2] = b;
+						pixel[3] = 255;
+					}
+				}
+				pSrc += 4 + length;
+			}
+			frames.push_back(surf);
+			pIcon += dataSize;
+		}
+
+		_cursors[i].setIcons((CursorType)i, frames);
+
+		for (uint f = 0; f < frames.size(); f++) {
+			frames[f]->free();
+			delete frames[f];
+		}
+	}
+
+	delete[] iconsData;
+
+	setActiveCursor(CursorType::kArrow);
+	CursorMan.showMouse(true);
+	return true;
 }
 
 void Murphy3dEngine::initializePath(const Common::FSNode &gamePath) {
@@ -132,6 +258,10 @@ Common::Error Murphy3dEngine::run() {
 
 	_font = new Font();
 	_font->load("UAKMFont.png");
+
+	if (!loadCursors()) {
+		warning("Murphy3d: Failed to load cursor graphics. Using OS default.");
+	}
 
 	_mainMenu = new MainMenu(_font);
 	_mainMenu->init();
@@ -240,6 +370,10 @@ Common::Error Murphy3dEngine::run() {
 			_renderer->updateMatrices(worldMat, viewMat, projMat);
 			_currentLocation->render(_renderer);
 		}
+
+		int cursorIdx = (int)_activeCursor;
+		if (_activeCursor <= CursorType::kSpecial && _cursors[cursorIdx].hasIcons())
+			_cursors[cursorIdx].render();
 
 		// Delay for a bit. All events loops should have a delay
 		// to prevent the system being unduly loaded
