@@ -272,7 +272,7 @@ Common::Error Murphy3dEngine::run() {
 	}
 
 	_currentLocation = new Location();
-	if (!_currentLocation->load("TEXOFF.AP"))
+	if (!_currentLocation->load("MAINSTRT.AP"))
 		return Common::Error(Common::kNoGameDataFoundError, _s("Could not load Location"));
 
 	_currentLocation->buildBuffers(_renderer);
@@ -364,7 +364,7 @@ Common::Error Murphy3dEngine::run() {
 		if (_state == kStateMainMenu) {
 			_mainMenu->render(_renderer);
 		} else if (_state == kStateInGame) {
-			_player->update();
+			_player->update(_currentLocation);
 			Math::Matrix4 worldMat = _player->getWorldMatrix();
 
 			_renderer->updateMatrices(worldMat, viewMat, projMat);

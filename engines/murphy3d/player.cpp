@@ -1,5 +1,6 @@
 #include "murphy3d/player.h"
 #include "murphy3d/math_utils.h"
+#include "murphy3d/location.h"
 
 namespace Murphy3d {
 
@@ -43,18 +44,18 @@ void Player::addRotation(float deltaYaw, float deltaPitch) {
 		_pitch = -1.5f;
 }
 
-void Player::update() {
+void Player::update(Location *currentLocation) {
 	float targetX = 0.0f;
 	float targetZ = 0.0f;
 
 	if (_moveLeft)
-		targetX -= 1.0f;
-	if (_moveRight)
 		targetX += 1.0f;
+	if (_moveRight)
+		targetX -= 1.0f;
 	if (_moveFwd)
-		targetZ += 1.0f;
-	if (_moveBack)
 		targetZ -= 1.0f;
+	if (_moveBack)
+		targetZ += 1.0f;
 
 	if (targetX != 0.0f || targetZ != 0.0f) {
 		float len = sqrt(targetX * targetX + targetZ * targetZ);
@@ -70,8 +71,21 @@ void Player::update() {
 	if (fabs(_smoothMoveZ) < 0.01f && targetZ == 0.0f)
 		_smoothMoveZ = 0.0f;
 
-	_x += (_smoothMoveZ * sin(_yaw) - _smoothMoveX * cos(_yaw));
-	_z -= (_smoothMoveZ * cos(_yaw) + _smoothMoveX * sin(_yaw));
+	float nextX = _x - (_smoothMoveZ * sin(_yaw) - _smoothMoveX * cos(_yaw));
+	float nextZ = _z + (_smoothMoveZ * cos(_yaw) + _smoothMoveX * sin(_yaw));
+
+	if (currentLocation) {
+		Math::Vector3d currentPosInWorld(-_x, _y, -_z);
+		Math::Vector3d intendedPosInWorld(-nextX, _y, -nextZ);
+
+		Math::Vector3d resolvedPos = currentLocation->resolveCollision(currentPosInWorld, intendedPosInWorld);
+
+		_x = -resolvedPos.x();
+		_z = -resolvedPos.z();
+	} else {
+		_x = nextX;
+		_z = nextZ;
+	}
 }
 
 Math::Matrix4 Player::getWorldMatrix() const {

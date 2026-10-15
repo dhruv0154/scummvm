@@ -6,6 +6,8 @@
 
 namespace Murphy3d {
 
+class Location;
+
 class Player {
 public:
 	Player();
@@ -17,7 +19,7 @@ public:
 	void setSpeed(bool isRunning);
 	void addRotation(float deltaYaw, float deltaPitch);
 
-	void update();
+	void update(Location *currentLocation = nullptr);
 
 	Math::Matrix4 getWorldMatrix() const;
 

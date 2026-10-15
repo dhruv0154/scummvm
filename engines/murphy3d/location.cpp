@@ -2,6 +2,7 @@
 #include "common/endian.h"
 #include "common/debug.h"
 #include "murphy3d/sqz.h"
+#include "murphy3d/math_utils.h"
 
 namespace Murphy3d {
 
@@ -78,6 +79,170 @@ void Location::render(Renderer *renderer) {
 	}
 }
 
+bool Location::loadPaths(Archive &archive) {
+	// the collision paths are stored in entry 1 of the location archive
+	Common::SeekableReadStream *stream = archive.getStream(1);
+	if (!stream)
+		return false;
+
+	_paths.clear();
+
+	// header
+	stream->seek(0x18);
+	uint16 pathVerticeCount = stream->readUint16LE();
+	uint16 pathCount = stream->readUint16LE();
+
+	// the vertex data starts at offset 0x80
+	stream->seek(0x80);
+
+	// we store the vertices, the paths will reference these by indices
+	Common::Array<Math::Vector3d> rawPoints;
+	rawPoints.resize(pathVerticeCount);
+
+	for (uint16 v = 0; v < pathVerticeCount; v++) {
+		// coordinates are stored as 16.16 fixed point signed integers
+		float x = (int32)stream->readUint32LE() / 65536.0f;
+		float y = (int32)stream->readUint32LE() / 65536.0f;
+		float z = (int32)stream->readUint32LE() / 65536.0f;
+
+		rawPoints[v] = Math::Vector3d(x, y, z);
+	}
+
+	// we read the actual paths which are defined as "Faces"
+	for (uint16 f = 0; f < pathCount; f++) {
+		uint32 chunkStart = stream->pos();
+		uint32 tag = stream->readUint32LE();
+
+		// check for the "FACE" tag
+		if (tag == 0x45434146) {
+			Path newPath;
+			newPath.enabled = true;
+			newPath.allowLeave = false;
+
+			uint32 faceSize = stream->readUint32LE();
+			uint32 vertCount = stream->readUint32LE();
+
+			// path ID is at relative offset 0x14
+			stream->seek(chunkStart + 14);
+			uint16 pathId = stream->readUint16LE();
+			newPath.id = (pathId != 0) ? pathId : f;
+
+			// vertex indices are starting at relative offset 0x15
+			stream->seek(chunkStart + 0x15);
+			for (uint32 v = 0; v < vertCount; v++) {
+				uint16 pointIndex = stream->readUint16LE();
+				if (pointIndex < pathVerticeCount) {
+					newPath.points.push_back(rawPoints[pointIndex]);
+				}
+			}
+
+			_paths.push_back(newPath);
+
+			// bypassing padding at the end of the block
+			stream->seek(chunkStart + faceSize);
+		} else {
+			break;
+		}
+	}
+
+	delete stream;
+	return true;
+}
+
+Math::Vector3d Location::resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos) const {
+	Math::Vector3d pp1 = startPos;
+	Math::Vector3d pp2 = targetPos;
+
+	bool collision = true;
+	Math::Vector3d currentTarget = pp2;
+
+	// the 2 pass loop, pass 0 checks for a wall hit and calculates the slide vector
+	// pass 1 checks if that new sliding vector hits a second wall (like a corner)
+	for (int pass = 0; pass < 2 && collision; pass++) {
+		collision = false;
+
+		double closest_t = 10000.0;
+		double closest_u = 0.0;
+		double closest_dist = 10000.0;
+
+		Math::Vector3d closestSegmentP1, closestSegmentP2;
+
+		// find the closest line segment across all enabled paths
+		for (uint i = 0; i < _paths.size(); i++) {
+			if (!_paths[i].enabled)
+				continue;
+
+			for (uint p1_idx = 0; p1_idx < _paths[i].points.size(); p1_idx++) {
+				uint p2_idx = (p1_idx + 1) % _paths[i].points.size();
+				Math::Vector3d pt1 = _paths[i].points[p1_idx];
+				Math::Vector3d pt2 = _paths[i].points[p2_idx];
+
+				double t = 0.0, u = 0.0;
+				double d = MathUtils::lineSegmentsDistanceXZ(pp1, pp2, pt1, pt2, t, u);
+
+				// 0.5 is the player collision radius
+				if (d < 0.5 && d < closest_dist) {
+					closestSegmentP1 = pt1;
+					closestSegmentP2 = pt2;
+					closest_t = t;
+					closest_u = u;
+					closest_dist = d;
+					collision = true;
+				}
+			}
+		}
+
+		// if we hit a wall, calculate the slide
+		if (collision) {
+			// find nearest points on the wall to the player start and end positions
+			Math::Vector3d mp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, pp2);
+			Math::Vector3d pp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, pp1);
+
+			// distance from player start position to it's projection point on the line
+			double playerDistanceToLine = pp1.getDistanceTo(pp);
+			// distance from player end position to it's projection point on the line
+			double movementDistanceToLine = pp2.getDistanceTo(mp);
+
+			double distanceDelta = playerDistanceToLine - movementDistanceToLine;
+			double percentage = 1.0;
+
+			// determine how far along our movement vector we were before hitting the 0.5 radius
+			if (playerDistanceToLine > 0.5 && movementDistanceToLine <= 0.5) {
+				percentage = (playerDistanceToLine - 0.5001) / distanceDelta;
+			} else if (playerDistanceToLine <= 0.5 && movementDistanceToLine >= playerDistanceToLine) {
+				percentage = 1.0;
+			} else if (playerDistanceToLine < 0.5 && movementDistanceToLine < playerDistanceToLine) {
+				// if we are already deep inside a wall's radius and trying to push deeper,
+				// completely abandon all movement for this frame
+				return startPos;
+			} else {
+				percentage = 0.0;
+			}
+
+			// tp is the exact point of impact
+			Math::Vector3d tp(pp1.x() + (pp2.x() - pp1.x()) * percentage, startPos.y(),
+				pp1.z() + (pp2.z() - pp1.z()) * percentage);
+
+			// calculate the slide vector parallel to the wall
+			Math::Vector3d tpp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, tp);
+			Math::Vector3d tmp = mp - tpp;
+
+			// for pass 1 (in case we slide into a corner)
+			pp1 = tp;
+			pp2 = Math::Vector3d(tp.x() + tmp.x(), startPos.y(), tp.z() + tmp.z());
+
+			// if this is pass 0, we intend to move to the slide point (pp2)
+			// if this is pass 1, we hit a second wall while sliding, so we just stop at the impact point (tp)
+			currentTarget = (pass == 0) ? pp2 : tp;
+		} else {
+			// no collision on this pass, target is safe
+			currentTarget = pp2;
+		}
+	}
+
+	return currentTarget;
+}
+
 bool Location::load(const Common::String &filename) {
 	Archive archive;
 
@@ -86,6 +251,9 @@ bool Location::load(const Common::String &filename) {
 		return false;
 
 	if (!loadPalette(archive))
+		return false;
+
+	if (!loadPaths(archive))
 		return false;
 
 	if (!loadTextures(archive))
