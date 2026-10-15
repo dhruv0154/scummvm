@@ -34,6 +34,13 @@ struct LocationObject {
 	Common::Array<LocationSubObject> subObjects;
 };
 
+struct Path {
+	uint32 id;
+	Common::Array<Math::Vector3d> points;
+	bool enabled;
+	bool allowLeave;
+};
+
 struct TextureGroup {
 	int32 textureIndex;
 	uint32 vbo;
@@ -53,8 +60,10 @@ public:
 	const Common::Array<LocationObject> &getObjects() const { return _objects; }
 	const Common::Array<Texture *> &getTextures() const { return _textures; }
 	const Common::Array<TextureGroup> &getTextureGroups() const { return _textureGroups; }
+	const Common::Array<Path> &getPaths() const { return _paths; }
 	void buildBuffers(Renderer *renderer);
 	void render(Renderer *renderer);
+	Math::Vector3d resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos) const;
 
 private:
 	byte _palette[768];
@@ -62,11 +71,12 @@ private:
 	Common::Array<LocationObject> _objects;
 	Common::Array<Texture *> _textures;
 	Common::Array<TextureGroup> _textureGroups;
+	Common::Array<Path> _paths;
 	
 	bool loadTextures(Archive &archive);
 	bool loadPalette(Archive &archive);
 	bool loadGeometry(Archive &archive);
-
+	bool loadPaths(Archive &archive);
 	void addTriangleToGroup(int32 textureIndex, uint32 flags, const PolygonPoint &p1, const PolygonPoint &p2, const PolygonPoint &p3);
 };
 
