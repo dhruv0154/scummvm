@@ -1,12 +1,15 @@
 #include "murphy3d/player.h"
 #include "murphy3d/math_utils.h"
 #include "murphy3d/location.h"
+#include "common/debug.h"
 
 namespace Murphy3d {
 
 Player::Player() {
 	_x = _y = _z = 0.0f;
 	_yaw = _pitch = 0.0f;
+	_yPlayerElevation = 0.0f;
+	_yPlayerAdjustment = -1.5f;
 
 	_moveFwd = _moveBack = _moveLeft = _moveRight = false;
 	_speed = 0.2f;
@@ -15,12 +18,14 @@ Player::Player() {
 	_smoothMoveZ = 0.0f;
 }
 
-void Player::spawn(float x, float y, float z, float yaw, float pitch) {
-	_x = x;
-	_y = y;
-	_z = z;
-	_yaw = yaw;
-	_pitch = pitch;
+void Player::spawn(const StartupPosition &start) {
+	_x = -start.x;
+	_y = -start.y;
+	_z = -start.z;
+	_yaw = start.angle;
+	_pitch = 0.0f;
+	_yPlayerAdjustment = start.initialEyeLevel;
+	_yPlayerElevation = start.elevation;
 }
 
 void Player::setMovement(bool fwd, bool back, bool left, bool right) {
@@ -75,12 +80,14 @@ void Player::update(Location *currentLocation) {
 	float nextZ = _z + (_smoothMoveZ * cos(_yaw) + _smoothMoveX * sin(_yaw));
 
 	if (currentLocation) {
-		Math::Vector3d currentPosInWorld(-_x, _y, -_z);
-		Math::Vector3d intendedPosInWorld(-nextX, _y, -nextZ);
+		Math::Vector3d currentPosInWorld(-_x, -_yPlayerElevation, -_z);
+		Math::Vector3d intendedPosInWorld(-nextX, -_yPlayerElevation, -nextZ);
 
 		Math::Vector3d resolvedPos = currentLocation->resolveCollision(currentPosInWorld, intendedPosInWorld);
 
 		_x = -resolvedPos.x();
+		_yPlayerElevation = -resolvedPos.y();
+		_y = _yPlayerElevation + _yPlayerAdjustment;
 		_z = -resolvedPos.z();
 	} else {
 		_x = nextX;

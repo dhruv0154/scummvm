@@ -3,6 +3,7 @@
 
 #include "common/scummsys.h"
 #include "math/matrix4.h"
+#include "murphy3d/map.h"
 
 namespace Murphy3d {
 
@@ -13,7 +14,7 @@ public:
 	Player();
 	~Player() {}
 
-	void spawn(float x, float y, float z, float yaw, float pitch);
+	void spawn(const StartupPosition &start);
 
 	void setMovement(bool fwd, bool back, bool left, bool right);
 	void setSpeed(bool isRunning);
@@ -29,6 +30,8 @@ public:
 
 private:
 	float _x, _y, _z;
+	float _yPlayerAdjustment;
+	float _yPlayerElevation;
 	float _yaw, _pitch;
 
 	bool _moveFwd, _moveBack, _moveLeft, _moveRight;

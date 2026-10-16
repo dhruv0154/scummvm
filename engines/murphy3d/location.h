@@ -10,6 +10,7 @@
 #include "murphy3d/texture.h"
 #include "murphy3d/renderer.h"
 #include "murphy3d/shader_structs.h"
+#include "murphy3d/elevation.h"
 
 namespace Murphy3d {
 
@@ -63,7 +64,7 @@ public:
 	const Common::Array<Path> &getPaths() const { return _paths; }
 	void buildBuffers(Renderer *renderer);
 	void render(Renderer *renderer);
-	Math::Vector3d resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos) const;
+	Math::Vector3d resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos);
 
 private:
 	byte _palette[768];
@@ -72,6 +73,8 @@ private:
 	Common::Array<Texture *> _textures;
 	Common::Array<TextureGroup> _textureGroups;
 	Common::Array<Path> _paths;
+	Common::Array<Elevation> _elevations;
+	Elevation *_currentElevation;
 	
 	bool loadTextures(Archive &archive);
 	bool loadPalette(Archive &archive);

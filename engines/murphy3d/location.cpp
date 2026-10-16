@@ -8,11 +8,14 @@ namespace Murphy3d {
 
 Location::Location() {
 	memset(_palette, 0, sizeof(_palette));
+	_currentElevation = nullptr;
 }
 
 Location::~Location() {
 	_vertices.clear();
 	_objects.clear();
+	_elevations.clear();
+	_currentElevation = nullptr;
 
 	for (uint i = 0; i < _textures.size(); i++) {
 		if (_textures[i] != nullptr)
@@ -149,7 +152,7 @@ bool Location::loadPaths(Archive &archive) {
 	return true;
 }
 
-Math::Vector3d Location::resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos) const {
+Math::Vector3d Location::resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos) {
 	Math::Vector3d pp1 = startPos;
 	Math::Vector3d pp2 = targetPos;
 
@@ -199,9 +202,9 @@ Math::Vector3d Location::resolveCollision(const Math::Vector3d &startPos, const 
 			Math::Vector3d pp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, pp1);
 
 			// distance from player start position to it's projection point on the line
-			double playerDistanceToLine = pp1.getDistanceTo(pp);
+			double playerDistanceToLine = sqrt(MathUtils::distanceSquaredXZ(pp1, pp));
 			// distance from player end position to it's projection point on the line
-			double movementDistanceToLine = pp2.getDistanceTo(mp);
+			double movementDistanceToLine = sqrt(MathUtils::distanceSquaredXZ(pp2, mp));
 
 			double distanceDelta = playerDistanceToLine - movementDistanceToLine;
 			double percentage = 1.0;
@@ -237,6 +240,25 @@ Math::Vector3d Location::resolveCollision(const Math::Vector3d &startPos, const 
 		} else {
 			// no collision on this pass, target is safe
 			currentTarget = pp2;
+		}
+	}
+
+	if (_currentElevation != nullptr) {
+		if (_currentElevation->isPointInElevation(currentTarget)) {
+			currentTarget.y() = _currentElevation->getElevationFromXZPosition(currentTarget);
+		} else {
+			currentTarget.y() = _currentElevation->getClosestElevation(currentTarget.y());
+		}
+		_currentElevation = nullptr;
+	}
+
+	if (_currentElevation == nullptr) {
+		for (uint i = 0; i < _elevations.size(); i++) {
+			if (_elevations[i].isPointInElevation(currentTarget)) {
+				currentTarget.y() = _elevations[i].getElevationFromXZPosition(currentTarget);
+				_currentElevation = &_elevations[i];
+				break;
+			}
 		}
 	}
 
@@ -360,6 +382,9 @@ bool Location::loadGeometry(Archive &archive) {
 						if (objToShow >= 0 && objToShow < (int32)objectCount)
 							objVisible[objToShow] = true;
 					}
+				} else if (type == 16) {
+					Elevation newElevation(animData + offset);
+					_elevations.push_back(newElevation);
 				}
 			}
 		}
