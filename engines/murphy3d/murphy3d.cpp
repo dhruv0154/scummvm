@@ -289,9 +289,9 @@ Common::Error Murphy3dEngine::run() {
 
 	for (int i = 0; i < 64; i++) {
 		MapData *md = gameMap.get(i);
-		if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
+		if (md && md->locationFileIndex == 62 && md->startupPositions.size() > 0) {
 			StartupPosition sp = md->startupPositions[0];
-			_player->spawn(-sp.x, sp.elevation + sp.initialEyeLevel, -sp.z, sp.angle, 0.0f);
+			_player->spawn(sp);
 			break;
 		}
 	}

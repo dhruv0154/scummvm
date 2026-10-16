@@ -194,6 +194,10 @@ inline Math::Vector3d projectXZ(const Math::Vector3d &p1, const Math::Vector3d &
 	return Math::Vector3d(p1.x() + u * px, 0.0f, p1.z() + u * pz);
 }
 
+inline double distanceSquaredXZ(const Math::Vector3d &a, const Math::Vector3d &b) {
+	return (a.x() - b.x()) * (a.x() - b.x()) + (a.z() - b.z()) * (a.z() - b.z());
+}
+
 inline double lineSegmentsDistanceXZ(const Math::Vector3d &p1, const Math::Vector3d &p2,
 									 const Math::Vector3d &p3, const Math::Vector3d &p4,
 									 double &t, double &uc) {
