@@ -12,17 +12,34 @@ Text::Text(Font *font) : _font(font), _vbo(0), _lines(0), _width(0.0f) {
 }
 
 Text::~Text() {
-	if (_vbo && g_engine->_renderer) {
+	if (_vbo && g_engine && g_engine->_renderer) {
 		g_engine->_renderer->deleteBuffer(_vbo);
 		_vbo = 0;
 	}
 }
 
 void Text::setColours(uint32 c1, uint32 c2, uint32 c3, uint32 c4) {
+	if (_colour1 == c1 && _colour2 == c2 && _colour3 == c3 && _colour4 == c4)
+		return;
+
 	_colour1 = c1;
 	_colour2 = c2;
 	_colour3 = c3;
 	_colour4 = c4;
+
+	// if vertices were already generated,
+	// update their RGB values in place and refresh the VBO
+	if (!_vertices.empty() && _vbo != 0 && g_engine && g_engine->_renderer) {
+		uint32 activeCol = (_colour1 != 0) ? _colour1 : _colour2;
+		float r, g, b;
+		extractRGB(activeCol, r, g, b);
+		for (uint i = 0; i < _vertices.size(); i++) {
+			_vertices[i].r = r;
+			_vertices[i].g = g;
+			_vertices[i].b = b;
+		}
+		g_engine->_renderer->updateBufferData(_vbo, _vertices.data(), _vertices.size() * sizeof(MULTICOLOURED_FONT_VERTEX), 0);
+	}
 }
 
 void Text::extractRGB(uint32 color, float &r, float &g, float &b) {
@@ -31,15 +48,25 @@ void Text::extractRGB(uint32 color, float &r, float &g, float &b) {
 	b = (color & 0xFF) / 255.0f;
 }
 
+void Text::setText(const Common::String &text, float scale) {
+	Rect rect = {0.0f, 0.0f, 640.0f, 480.0f};
+	setText(text, rect, kAlignLeft, scale);
+}
+
 void Text::setText(const Common::String &text, const Rect &rect, TextAlignment alignment, float scale) {
 	_vertices.clear();
+	if (!_font && g_engine)
+		_font = g_engine->_font;
 	if (text.empty() || !_font)
 		return;
+
+	_width = _font->getPixelWidth(text) * scale;
 
 	Common::Array<Word> words;
 	int start = 0;
 	float pixels = 0.0f;
-	uint32 currentCol = _colour1;
+	uint32 defaultCol = (_colour1 != 0) ? _colour1 : _colour2;
+	uint32 currentCol = defaultCol;
 
 	for (uint i = 0; i <= text.size(); i++) {
 		char c = (i == text.size()) ? 0 : text[i];
@@ -61,7 +88,7 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 				else if (c == '~')
 					currentCol = _colour3;
 				else if (c == '>' || c == '@')
-					currentCol = _colour1;
+					currentCol = defaultCol;
 				else if (c == '\n') {
 					Word nl;
 					nl.text = "\n";
@@ -73,7 +100,7 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 		} else if (c == '^' && i + 1 < text.size()) {
 			char cix = text[++i];
 			if (cix == 0x2d)
-				currentCol = _colour1;
+				currentCol = defaultCol;
 			else if (cix == 0x2e)
 				currentCol = _colour2;
 			else if (cix == 0x3f)
@@ -173,11 +200,11 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 }
 
 void Text::render(Renderer *renderer, float x, float y, float z) {
-	if (_vertices.empty() || !_vbo || !_font->getTexture())
+	if (_vertices.empty() || !_vbo || !_font || !_font->getTexture())
 		return;
 
 	Math::Matrix4 worldMat = MathUtils::translation(floor(x), -floor(y), z);
 	renderer->drawUI(_vbo, _vertices.size(), _font->getTexture()->getId(), worldMat);
 }
 
-}; // End of namespace Murphy3d
+} // End of namespace Murphy3d

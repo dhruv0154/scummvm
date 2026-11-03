@@ -1,0 +1,350 @@
+diff --git a/engines/murphy3d/configure.engine b/engines/murphy3d/configure.engine
+index 09c236a5..fa6122f7 100644
+--- a/engines/murphy3d/configure.engine
++++ b/engines/murphy3d/configure.engine
+@@ -1,3 +1,3 @@
+ # This file is included from the main "configure" script
+ # add_engine [name] [desc] [build-by-default] [subengines] [base games] [deps] [components]
+-add_engine murphy3d "Murphy3d" no "" "" "" ""
++add_engine murphy3d "Murphy3d" no "" "" "16bit 3d highres opengl_game_shaders" ""
+diff --git a/engines/murphy3d/location.cpp b/engines/murphy3d/location.cpp
+index 39b009bd..fc6a5eb9 100644
+--- a/engines/murphy3d/location.cpp
++++ b/engines/murphy3d/location.cpp
+@@ -43,25 +43,6 @@ void Location::buildBuffers(Renderer *renderer) {
+ 	}
+ 
+ 	debug(0, "Murphy3D Pipeline: Built %d VBOs containing a total of %d vertices.", totalVBOs, totalVertices);
+-
+-	Std140Vec4 defaultVisibility[4096];
+-	for (int i = 0; i < 4096; i++) {
+-		defaultVisibility[i].x = 1.0f;
+-		defaultVisibility[i].y = 1.0f;
+-		defaultVisibility[i].z = 0.0f;
+-		defaultVisibility[i].w = 1.0f;
+-	}
+-	renderer->updateVisibilityBuffer(defaultVisibility, sizeof(defaultVisibility));
+-
+-
+-	Std140Vec4 defaultTranslation[256];
+-	for (int i = 0; i < 256; i++) {
+-		defaultTranslation[i].x = 0.0f;
+-		defaultTranslation[i].y = 0.0f;
+-		defaultTranslation[i].z = 0.0f;
+-		defaultTranslation[i].w = 0.0f;
+-	}
+-	renderer->updateTranslationBuffer(defaultTranslation, sizeof(defaultTranslation));
+ }
+ 
+ void Location::render(Renderer *renderer) {
+@@ -304,9 +285,11 @@ bool Location::loadTextures(Archive &archive) {
+ 	uint32 rgbaPalette[256];
+ 	byte *palBytes = (byte *)rgbaPalette;
+ 	for (int i = 0; i < 256; i++) {
+-		palBytes[i * 4 + 0] = (_palette[i * 3 + 0] * 255) / 63;
+-		palBytes[i * 4 + 1] = (_palette[i * 3 + 1] * 255) / 63;
+-		palBytes[i * 4 + 2] = (_palette[i * 3 + 2] * 255) / 63;
++		// Unlike the VGA palettes used by the 2D resources, location
++		// palettes already contain full-range 8-bit RGB components.
++		palBytes[i * 4 + 0] = _palette[i * 3 + 0];
++		palBytes[i * 4 + 1] = _palette[i * 3 + 1];
++		palBytes[i * 4 + 2] = _palette[i * 3 + 2];
+ 		palBytes[i * 4 + 3] = 255;
+ 	}
+ 
+diff --git a/engines/murphy3d/murphy3d.cpp b/engines/murphy3d/murphy3d.cpp
+index 38996935..824ec963 100644
+--- a/engines/murphy3d/murphy3d.cpp
++++ b/engines/murphy3d/murphy3d.cpp
+@@ -31,6 +31,7 @@
+ #include "common/system.h"
+ #include "common/file.h"
+ #include "common/stream.h"
++#include "common/translation.h"
+ #include "murphy3d/archive.h"
+ #include "murphy3d/item.h"
+ #include "murphy3d/ptf_decoder.h"
+@@ -56,6 +57,15 @@ Murphy3dEngine::~Murphy3dEngine() {
+ 	delete _renderer;
+ }
+ 
++void Murphy3dEngine::initializePath(const Common::FSNode &gamePath) {
++	Engine::initializePath(gamePath);
++
++	// Chapter 1 is present on disc 2 and contains the initial Tex's Office
++	// location. Support both a copied disc root and a multi-disc directory.
++	SearchMan.addSubDirectoryMatching(gamePath, "MASTERTX/CHAP01", 0, 4);
++	SearchMan.addSubDirectoryMatching(gamePath, "DISK2/MASTERTX/CHAP01", 0, 4);
++}
++
+ uint32 Murphy3dEngine::getFeatures() const {
+ 	return _gameDescription->flags;
+ }
+@@ -65,6 +75,10 @@ Common::String Murphy3dEngine::getGameId() const {
+ }
+ 
+ Common::Error Murphy3dEngine::run() {
++	if (!g_system->hasFeature(OSystem::kFeatureShadersForGame)) {
++		return Common::Error(Common::kUnknownError, _s("This game requires OpenGL with shaders, which is not supported on your system"));
++	}
++
+ 	initGraphics3d(640, 480);
+ 	_screen = new Graphics::Screen();
+ 
+@@ -81,6 +95,7 @@ Common::Error Murphy3dEngine::run() {
+ 	_renderer = new Renderer();
+ 	if (!_renderer->init()) {
+ 		warning("Murphy3d: Failed to initialize OpenGL 3D Renderer!");
++		return Common::Error(Common::kUnknownError, _s("Failed to initialize the OpenGL renderer"));
+ 	}
+ 
+ 	UAKMMap gameMap;
+@@ -89,9 +104,10 @@ Common::Error Murphy3dEngine::run() {
+ 	}
+ 
+ 	Location texOffice;
+-	if (texOffice.load("TEXOFF.AP")) {
+-		texOffice.buildBuffers(_renderer);
+-	}
++	if (!texOffice.load("TEXOFF.AP"))
++		return Common::Error(Common::kNoGameDataFoundError, _s("Could not load TEXOFF.AP"));
++
++	texOffice.buildBuffers(_renderer);
+ 
+ 	Math::Vector3d eyePos(0.0f, 0.0f, 0.0f);
+ 	Math::Vector3d eyeAt(0.0f, 0.0f, 1.0f);
+diff --git a/engines/murphy3d/murphy3d.h b/engines/murphy3d/murphy3d.h
+index b441f681..787a17d9 100644
+--- a/engines/murphy3d/murphy3d.h
++++ b/engines/murphy3d/murphy3d.h
+@@ -55,6 +55,7 @@ public:
+ public:
+ 	Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc);
+ 	~Murphy3dEngine() override;
++	void initializePath(const Common::FSNode &gamePath) override;
+ 
+ 	uint32 getFeatures() const;
+ 
+diff --git a/engines/murphy3d/renderer.cpp b/engines/murphy3d/renderer.cpp
+index 50b7c916..1ef9b96b 100644
+--- a/engines/murphy3d/renderer.cpp
++++ b/engines/murphy3d/renderer.cpp
+@@ -2,28 +2,27 @@
+ #include "murphy3d/shader.h"
+ #include "murphy3d/shader_structs.h"
+ 
++#include "common/system.h"
++
+ namespace Murphy3d {
+ 
+-Renderer::Renderer() : _vao(0), _visibilityUbo(0), _translationUbo(0), _shaderManager(nullptr) {
++Renderer::Renderer() : _shaderManager(nullptr) {
+ }
+ 
+ Renderer::~Renderer() {
+-	if (_vao)
+-		glDeleteVertexArrays(1, &_vao);
+-	if (_visibilityUbo)
+-		glDeleteBuffers(1, &_visibilityUbo);
+-	if (_translationUbo)
+-		glDeleteBuffers(1, &_translationUbo);
+ 	if (_shaderManager)
+ 		delete _shaderManager;
+ }
+ 
+ bool Renderer::init() {
+-#if !defined(USE_OPENGL_GAME)
++#if !defined(USE_OPENGL_SHADERS)
+ 	return false;
+-#endif
+-
+-	OpenGLContext.initialize(OpenGL::ContextType::kContextGL);
++#else
++	// initGraphics3d() creates the context and initializes OpenGLContext.
++	// Do not request a different context type here: the backend-selected
++	// compatibility context is also used by ScummVM's shader renderers.
++	if (!OpenGLContext.enginesShadersSupported)
++		return false;
+ 
+ 	glEnable(GL_DEPTH_TEST);
+ 	glEnable(GL_BLEND);
+@@ -31,15 +30,6 @@ bool Renderer::init() {
+ 
+ 	glDisable(GL_CULL_FACE);
+ 
+-	glGenVertexArrays(1, &_vao);
+-	glBindVertexArray(_vao);
+-
+-	_visibilityUbo = createUniformBuffer(4096 * 16);
+-	_translationUbo = createUniformBuffer(256 * 16);
+-
+-	glBindBufferBase(GL_UNIFORM_BUFFER, 3, _visibilityUbo);
+-	glBindBufferBase(GL_UNIFORM_BUFFER, 5, _translationUbo);
+-
+ 	_shaderManager = new ShaderManager();
+ 	if (!_shaderManager->init()) {
+ 		warning("Renderer: Failed to initialize ShaderManager.");
+@@ -47,11 +37,11 @@ bool Renderer::init() {
+ 	}
+ 
+ 	return true;
++#endif
+ }
+ 
+ void Renderer::clear(float r, float g, float b) {
+-	glBindVertexArray(_vao);
+-	glViewport(0, 0, 640, 480);
++	glViewport(0, 0, g_system->getWidth(), g_system->getHeight());
+ 	glEnable(GL_DEPTH_TEST);
+ 	glDepthFunc(GL_LESS);
+ 	glDepthMask(GL_TRUE);  
+@@ -83,33 +73,11 @@ GLuint Renderer::createIndexBuffer(const void *data, uint32 size, bool dynamic)
+ 	return ebo;
+ }
+ 
+-GLuint Renderer::createUniformBuffer(uint32 size) {
+-	GLuint ubo;
+-	glGenBuffers(1, &ubo);
+-	glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+-
+-	glBufferData(GL_UNIFORM_BUFFER, size, nullptr, GL_DYNAMIC_DRAW);
+-	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+-	return ubo;
+-}
+-
+ void Renderer::updateBufferData(GLuint bufferId, const void *data, uint32 size, uint32 offset) {
+ 	glBindBuffer(GL_ARRAY_BUFFER, bufferId);
+ 	glBufferSubData(GL_ARRAY_BUFFER, offset, size, data);
+ }
+ 
+-void Renderer::updateVisibilityBuffer(const void *visibilityData, uint32 sizeInBytes) {
+-	glBindBuffer(GL_UNIFORM_BUFFER, _visibilityUbo);
+-	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeInBytes, visibilityData);
+-	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+-}
+-
+-void Renderer::updateTranslationBuffer(const void *translationData, uint32 sizeInBytes) {
+-	glBindBuffer(GL_UNIFORM_BUFFER, _translationUbo);
+-	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeInBytes, translationData);
+-	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+-}
+-
+ void Renderer::deleteBuffer(GLuint bufferId) {
+ 	glDeleteBuffers(1, &bufferId);
+ }
+@@ -134,9 +102,7 @@ void Renderer::drawTexturedTriangles(GLuint vbo, uint32 vertexCount, uint32 star
+ 
+ 	shader->enableVertexAttribute("position", vbo, 3, GL_FLOAT, GL_FALSE, stride, 0);
+ 	shader->enableVertexAttribute("texCoord", vbo, 2, GL_FLOAT, GL_FALSE, stride, 3 * sizeof(float));
+-	shader->enableVertexAttribute("object", vbo, 2, GL_FLOAT, GL_FALSE, stride, 5 * sizeof(float));
+-	shader->enableVertexAttribute("objectParameters", vbo, 4, GL_FLOAT, GL_FALSE, stride, 7 * sizeof(float));
+-	shader->use();
++	shader->use(true);
+ 
+ 	glDrawArrays(GL_TRIANGLES, startVertex, vertexCount);
+ }
+diff --git a/engines/murphy3d/renderer.h b/engines/murphy3d/renderer.h
+index ebff6a57..6fc7bcea 100644
+--- a/engines/murphy3d/renderer.h
++++ b/engines/murphy3d/renderer.h
+@@ -21,23 +21,15 @@ public:
+ 
+ 	GLuint createVertexBuffer(const void *data, uint32 size, bool dynamic = false);
+ 	GLuint createIndexBuffer(const void *data, uint32 size, bool dynamic = false);
+-	GLuint createUniformBuffer(uint32 size);
+ 
+ 	void updateBufferData(GLuint bufferId, const void *data, uint32 size, uint32 offset = 0);
+ 	void deleteBuffer(GLuint bufferId);
+ 
+-	void updateVisibilityBuffer(const void *visibilityData, uint32 sizeInBytes);
+-	void updateTranslationBuffer(const void *translationData, uint32 sizeInBytes);
+-
+ 	void bindTexture(GLuint textureId, uint8 slot = 0);
+ 	void updateMatrices(const Math::Matrix4 &world, const Math::Matrix4 &view, const Math::Matrix4 &proj);
+ 	void drawTexturedTriangles(GLuint vbo, uint32 vertexCount, uint32 startVertex = 0);
+ 
+ private:
+-	GLuint _vao;
+-	GLuint _visibilityUbo;
+-	GLuint _translationUbo;
+-
+ 	ShaderManager *_shaderManager;
+ };
+ 
+diff --git a/engines/murphy3d/shader.cpp b/engines/murphy3d/shader.cpp
+index be14202f..e0ba562b 100644
+--- a/engines/murphy3d/shader.cpp
++++ b/engines/murphy3d/shader.cpp
+@@ -17,12 +17,10 @@ bool ShaderManager::init() {
+ 	const char *const attributes[] = {
+ 		"position",
+ 		"texCoord",
+-		"object",
+-		"objectParameters",
+ 		nullptr};
+ 
+ 	bool success = _texturedShader->loadFromStrings("texturedShader", getVertexShaderTextured(),
+-					getPixelShaderTextured(), attributes);
++					getPixelShaderTextured(), attributes, 120);
+ 
+ 	if (!success) {
+ 		warning("ShaderManager: Failed to compile Textured shader. %s", _texturedShader->getError().c_str());
+@@ -30,18 +28,6 @@ bool ShaderManager::init() {
+ 	}
+ 
+ 	_texturedShader->use();
+-
+-	GLint prog = 0;
+-	glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+-
+-	GLuint visIdx = glGetUniformBlockIndex(prog, "Visibility");
+-	if (visIdx != GL_INVALID_INDEX)
+-		glUniformBlockBinding(prog, visIdx, 3);
+-
+-	GLuint transIdx = glGetUniformBlockIndex(prog, "Translation");
+-	if (transIdx != GL_INVALID_INDEX)
+-		glUniformBlockBinding(prog, transIdx, 5);
+-
+ 	_texturedShader->setUniform("texture1", 0);
+ 
+ 	return true;
+@@ -62,8 +48,7 @@ void ShaderManager::setMatrices(const Math::Matrix4 &world, const Math::Matrix4
+ }
+ 
+ const char *ShaderManager::getVertexShaderTextured() {
+-	return "#version 330 core\n"
+-		   "in vec3 position;\n"
++	return "in vec3 position;\n"
+ 		   "in vec2 texCoord;\n"
+ 		   "out vec2 TexCoord;\n"
+ 		   "uniform mat4 World;\n"
+@@ -76,13 +61,12 @@ const char *ShaderManager::getVertexShaderTextured() {
+ }
+ 
+ const char *ShaderManager::getPixelShaderTextured() {
+-	return "#version 330 core\n"
+-		   "in vec2 TexCoord;\n"
+-		   "out vec4 color;\n"
++	return "in vec2 TexCoord;\n"
++		   "OUTPUT\n"
+ 		   "uniform sampler2D texture1;\n"
+ 		   "void main() {\n"
+ 		   "    vec4 texColor = texture(texture1, TexCoord);\n"
+-		   "    color = texColor;\n"
++		   "    outColor = texColor;\n"
+ 		   "}\n";
+ }
+ 
+diff --git a/engines/murphy3d/texture.cpp b/engines/murphy3d/texture.cpp
+index 9377c95d..7288dc02 100644
+--- a/engines/murphy3d/texture.cpp
++++ b/engines/murphy3d/texture.cpp
+@@ -52,6 +52,8 @@ void Texture::uploadToGPU(const byte *rgbaData) {
+ 
+ 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+ 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
++	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
++	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ 
+ 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _width, _height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgbaData);
+ 	glBindTexture(GL_TEXTURE_2D, 0);

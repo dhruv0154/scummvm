@@ -23,13 +23,17 @@ struct Rect {
 
 class Text {
 public:
-	Text(Font *font);
+	Text(Font *font = nullptr);
 	~Text();
 
+	void setFont(Font *font) { _font = font; }
 	void setColours(uint32 c1, uint32 c2 = 0, uint32 c3 = 0, uint32 c4 = 0);
 
 	// generates the geometry for the text
 	void setText(const Common::String &text, const Rect &rect, TextAlignment alignment = kAlignLeft, float scale = 1.0f);
+
+	// single line overload
+	void setText(const Common::String &text, float scale = 1.0f);
 
 	void render(Renderer *renderer, float x, float y, float z = -1.0f);
 
@@ -56,4 +60,5 @@ private:
 };
 
 } // End of namespace Murphy3d
+
 #endif

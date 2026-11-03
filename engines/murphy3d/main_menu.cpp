@@ -1,23 +1,39 @@
 #include "murphy3d/main_menu.h"
-#include "murphy3d/murphy3d.h"
-#include "murphy3d/math_utils.h"
-#include "common/file.h"
 #include "common/debug.h"
+#include "common/file.h"
+#include "common/keyboard.h"
+#include "common/system.h"
+#include "graphics/cursorman.h"
 #include "graphics/surface.h"
-#include "image/png.h"
 #include "image/jpeg.h"
+#include "image/png.h"
+#include "murphy3d/animated_cursor.h"
+#include "murphy3d/game_controller.h"
+#include "murphy3d/math_utils.h"
+#include "murphy3d/module_controller.h"
+#include "murphy3d/murphy3d.h"
 
 namespace Murphy3d {
 
+MainMenu *MainMenu::_mainMenuModule = nullptr;
+
 MainMenu::MainMenu(Font *font)
-	: _font(font), _bgTexture(nullptr), _bgVbo(0),
+	: ModuleBase(ModuleType::kMainMenu),
+	  _font(font), _bgTexture(nullptr), _bgVbo(0),
 	  _bgX(0.0f), _bgY(0.0f), _bgW(640.0f), _bgH(480.0f),
 	  _btnNewGame(nullptr), _btnLoad(nullptr), _btnSave(nullptr),
 	  _btnConfig(nullptr), _btnIntro(nullptr), _btnCredits(nullptr),
 	  _btnResume(nullptr), _btnQuit(nullptr), _hoveredButton(nullptr) {
+
+	_font = g_engine->_font;
+	_mainMenuModule = this;
 }
 
 MainMenu::~MainMenu() {
+	if (_mainMenuModule == this) {
+		_mainMenuModule = nullptr;
+	}
+
 	for (uint i = 0; i < _buttons.size(); ++i) {
 		delete _buttons[i];
 	}
@@ -36,12 +52,18 @@ MainMenu::~MainMenu() {
 	Button::disposeTextures();
 }
 
+void MainMenu::enableSaveAndResume(bool enable) {
+	if (_mainMenuModule != nullptr) {
+		_mainMenuModule->enableResume(enable);
+		_mainMenuModule->enableSave(enable);
+	}
+}
+
 bool MainMenu::loadBackground() {
 	Common::File *file = new Common::File();
-	file->open(Common::Path("UAKM-Title.jpg"));
-
-	if (!file) {
+	if (!file->open(Common::Path("UAKM-Title.jpg"))) {
 		warning("MainMenu: Failed to find background title image.");
+		delete file;
 		return false;
 	}
 
@@ -96,7 +118,11 @@ void MainMenu::buildBackgroundQuad(float w, float h) {
 	}
 }
 
-bool MainMenu::init() {
+void MainMenu::initialize() {
+	// Release mouse lock and show the arrow cursor when entering MainMenu
+	g_system->lockMouse(false);
+	CursorMan.showMouse(true);
+
 	Button::initTextures("Button.png", "Button_MouseOver.png");
 
 	loadBackground();
@@ -114,7 +140,7 @@ bool MainMenu::init() {
 	const char *pQu = "Quit";
 
 	float maxw = 0.0f;
-	const char *labels[] = { pNG, pLG, pSG, pCf, pIn, pCr, pRe, pQu };
+	const char *labels[] = {pNG, pLG, pSG, pCf, pIn, pCr, pRe, pQu};
 	for (int i = 0; i < 8; ++i) {
 		float pw = _font->getPixelWidth(labels[i]);
 		if (pw > maxw)
@@ -129,10 +155,10 @@ bool MainMenu::init() {
 	float moonCenterX = _bgW - _bgX - moonW / 2.0f;
 	float moonCenterY = _bgH / 2.2f;
 
-	float btnRight  = moonCenterX + 32.0f * scale;
-	float btnLeft   = btnRight - maxw - 96.0f * scale;
+	float btnRight = moonCenterX + 32.0f * scale;
+	float btnLeft = btnRight - maxw - 96.0f * scale;
 	float btnMiddle = moonCenterY;
-	float btnTop    = btnMiddle - 64.0f * scale;
+	float btnTop = btnMiddle - 64.0f * scale;
 	float btnBottom = btnMiddle + 64.0f * scale;
 
 	_btnNewGame = new Button(pNG, maxw, btnHeight, onNewGame, this, _font, scale);
@@ -169,8 +195,31 @@ bool MainMenu::init() {
 	_btnQuit = new Button(pQu, maxw, btnHeight, onQuit, this, _font, scale);
 	_btnQuit->setPosition(centerBtnX, btnBottom + 64.0f * scale);
 	_buttons.push_back(_btnQuit);
+}
 
-	return true;
+void MainMenu::resize(int width, int height) {
+}
+
+void MainMenu::pause() {
+	// Clear hover state when switching away from MainMenu so the button isn't stuck highlighted
+	if (_hoveredButton) {
+		_hoveredButton->mouseLeave();
+		_hoveredButton = nullptr;
+	}
+}
+
+void MainMenu::resume() {
+	// When returning to MainMenu (e.g., pressing ESC in LocationModule), unlock mouse & show cursor
+	g_system->lockMouse(false);
+	CursorMan.showMouse(true);
+}
+
+void MainMenu::render() {
+	if (g_engine && g_engine->_renderer) {
+		render(g_engine->_renderer);
+	}
+	// Just like WinTex CMainMenuModule::Render() line 356:
+	ModuleController::_cursors[static_cast<int>(CursorType::kArrow)].render();
 }
 
 void MainMenu::render(Renderer *renderer) {
@@ -185,6 +234,29 @@ void MainMenu::render(Renderer *renderer) {
 		if (_buttons[i]->getVisible()) {
 			_buttons[i]->render();
 		}
+	}
+}
+
+void MainMenu::mouseMove(Common::Point pt) {
+	handleMouseMove(pt.x, pt.y);
+}
+
+void MainMenu::mouseDown(Common::Point pt, int btn) {
+	if (btn == 1) {
+		handleMouseDown(pt.x, pt.y);
+	}
+}
+
+void MainMenu::mouseUp(Common::Point pt, int btn) {
+	if (btn == 1) {
+		handleMouseUp(pt.x, pt.y);
+	}
+}
+
+void MainMenu::keyDown(uint32 key, uint32 lParam) {
+	if (key == Common::KEYCODE_ESCAPE) {
+		// Same as WinTex CMainMenuModule::Back(): send MainMenu to back of stack
+		ModuleController::sendToBack(this);
 	}
 }
 
@@ -251,9 +323,7 @@ void MainMenu::enableSave(bool enable) {
 
 void MainMenu::onNewGame(void *data) {
 	debug(0, "MainMenu: 'New Game' clicked.");
-	if (g_engine) {
-		g_engine->startNewGame();
-	}
+	GameController::newGame();
 }
 
 void MainMenu::onLoad(void *data) {
@@ -278,8 +348,9 @@ void MainMenu::onCredits(void *data) {
 
 void MainMenu::onResume(void *data) {
 	debug(0, "MainMenu: 'Resume' clicked.");
-	if (g_engine) {
-		g_engine->resumeGame();
+	MainMenu *self = static_cast<MainMenu *>(data);
+	if (self) {
+		ModuleController::sendToBack(self);
 	}
 }
 
