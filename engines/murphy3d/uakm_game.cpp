@@ -29,9 +29,7 @@ UAKMGame::~UAKMGame() {
 
 bool UAKMGame::init() {
 	readGameXMLInfo("UAKM.xml");
-	if (GameController::getFileName(48).empty()) {
-		GameController::setFileName(48, "TEXOFF.AP");
-	}
+
 	// pass nullptr for dmap for now
 	UAKMMap *map = new UAKMMap();
 	if (ModuleController::init(map, nullptr) && loadIcons()) {

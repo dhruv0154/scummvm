@@ -15,6 +15,17 @@
 
 namespace Murphy3d {
 
+struct Box {
+	float x1, y1, z1;
+	float x2, y2, z2;
+};
+
+struct LocationTriangle {
+	Math::Vector3d p1;
+	Math::Vector3d p2;
+	Math::Vector3d p3;
+};
+
 struct PolygonPoint {
 	Math::Vector3d pos;
 	float u, v;
@@ -24,6 +35,11 @@ struct LocationSubObject {
 	uint32 id;
 	int32 textureIndex;
 	uint32 flags;
+	uint32 pointCount;
+	bool visible;
+
+	Box boundingBox;
+	Common::Array<LocationTriangle> triangles;
 
 	// for sprites
 	float spriteWidth;
@@ -33,6 +49,8 @@ struct LocationSubObject {
 
 struct LocationObject {
 	uint32 flags;
+	bool visible;
+	Box boundingBox;
 	Common::Array<LocationSubObject> subObjects;
 };
 
@@ -89,6 +107,9 @@ public:
 	static float _y_player_adjustment_min;
 	static float _y_player_adjustment_max;
 	static float _y_elevation;
+	int _hitObject;
+	int _hitSubObject;
+	int _objectIndex;
 
 	const byte *getPalette() const { return _palette; }
 	const Common::Array<Math::Vector3d> &getVertices() const { return _vertices; }
@@ -101,6 +122,7 @@ protected:
 	void updateY() {
 		_y = _y_elevation + _y_player_adjustment;
 	}
+	bool intersect(const Box &boundingBox, const Math::Vector3d &from, const Math::Vector3d &invDir);
 
 	void clear();
 
