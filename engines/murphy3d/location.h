@@ -11,6 +11,7 @@
 #include "murphy3d/renderer.h"
 #include "murphy3d/shader_structs.h"
 #include "murphy3d/elevation.h"
+#include "murphy3d/map.h"
 
 namespace Murphy3d {
 
@@ -54,7 +55,40 @@ public:
 	Location();
 	~Location();
 
+	bool load(int locationFileIndex);
 	bool load(const Common::String &filename);
+
+	void render();
+	void render(Renderer *renderer);
+	void buildBuffers(Renderer *renderer);
+
+	static void setPosition(StartupPosition pos);
+	static void setPosition(float x, float y, float z, float angle);
+	void move(float mx, float my, float mz, float tmx);
+	void deltaAngles(float angle1, float angle2);
+	void updateSprites();
+	void animate();
+
+	bool _pointingChanged;
+
+	int getPickObject(int &objectId, int &subObjectId);
+	void setObjectVisibility(int objectId, bool visible);
+
+	double getPlayerDistanceFromPoint(double x, double z);
+	Math::Vector3d getPlayerPosition();
+	Math::Vector3d getUnadjustedPlayerPosition();
+
+	MapData *_mapEntry;
+
+	static float _x;
+	static float _y;
+	static float _z;
+	static float _angle1;
+	static float _angle2;
+	static float _y_player_adjustment;
+	static float _y_player_adjustment_min;
+	static float _y_player_adjustment_max;
+	static float _y_elevation;
 
 	const byte *getPalette() const { return _palette; }
 	const Common::Array<Math::Vector3d> &getVertices() const { return _vertices; }
@@ -62,9 +96,16 @@ public:
 	const Common::Array<Texture *> &getTextures() const { return _textures; }
 	const Common::Array<TextureGroup> &getTextureGroups() const { return _textureGroups; }
 	const Common::Array<Path> &getPaths() const { return _paths; }
-	void buildBuffers(Renderer *renderer);
-	void render(Renderer *renderer);
-	Math::Vector3d resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos);
+
+protected:
+	void updateY() {
+		_y = _y_elevation + _y_player_adjustment;
+	}
+
+	void clear();
+
+	static bool _loading;
+	static Elevation *_currentElevation;
 
 private:
 	byte _palette[768];
@@ -74,8 +115,7 @@ private:
 	Common::Array<TextureGroup> _textureGroups;
 	Common::Array<Path> _paths;
 	Common::Array<Elevation> _elevations;
-	Elevation *_currentElevation;
-	
+
 	bool loadTextures(Archive &archive);
 	bool loadPalette(Archive &archive);
 	bool loadGeometry(Archive &archive);
@@ -84,4 +124,5 @@ private:
 };
 
 } // End of namespace Murphy3d
+
 #endif

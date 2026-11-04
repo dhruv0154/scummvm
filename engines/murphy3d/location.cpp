@@ -1,27 +1,103 @@
-#include "murphy3d/location.h"
 #include "common/endian.h"
 #include "common/debug.h"
+#include "murphy3d/location.h"
+#include "murphy3d/murphy3d.h"
 #include "murphy3d/sqz.h"
 #include "murphy3d/math_utils.h"
+#include "murphy3d/game_controller.h"
 
 namespace Murphy3d {
 
+static const float kTwoPi = 6.283185307f;
+static const float kHalfPi = 3.141592654f / 2.0f;
+
+bool Location::_loading = false;
+float Location::_x = 0.0f;
+float Location::_y = 0.0f;
+float Location::_z = 0.0f;
+float Location::_angle1 = 0.0f;
+float Location::_angle2 = 0.0f;
+float Location::_y_player_adjustment = 0.0f;
+float Location::_y_player_adjustment_min = 0.0f;
+float Location::_y_player_adjustment_max = 0.0f;
+float Location::_y_elevation = 0.0f;
+Elevation *Location::_currentElevation = nullptr;
+
 Location::Location() {
 	memset(_palette, 0, sizeof(_palette));
+	_loading = false;
+	_pointingChanged = false;
+	_mapEntry = nullptr;
+
+	_x = 0.0f;
+	_y = 0.0f;
+	_z = 0.0f;
+	_angle1 = 0.0f;
+	_angle2 = 0.0f;
+	_y_player_adjustment = -1.5f;
+	_y_player_adjustment_min = 0.0f;
+	_y_player_adjustment_max = 0.0f;
+	_y_elevation = 0.0f;
 	_currentElevation = nullptr;
 }
 
 Location::~Location() {
+	clear();
+}
+
+void Location::clear() {
 	_vertices.clear();
 	_objects.clear();
+	_paths.clear();
 	_elevations.clear();
 	_currentElevation = nullptr;
 
+	for (uint i = 0; i < _textureGroups.size(); i++) {
+		if (_textureGroups[i].vbo != 0 && g_engine && g_engine->_renderer) {
+			g_engine->_renderer->deleteBuffer(_textureGroups[i].vbo);
+		}
+	}
+	_textureGroups.clear();
+
 	for (uint i = 0; i < _textures.size(); i++) {
 		if (_textures[i] != nullptr)
-			delete _textures[i];
+		delete _textures[i];
 	}
 	_textures.clear();
+}
+
+bool Location::load(int locationFileIndex) {
+	Common::String file = GameController::getFileName(locationFileIndex);
+	if (file.empty()) {
+		return false;
+	}
+	return load(file);
+}
+
+bool Location::load(const Common::String &filename) {
+	_loading = true;
+	_pointingChanged = true;
+
+	clear();
+
+	Archive archive;
+	if (!archive.open(Common::Path(filename))) {
+		_loading = false;
+		return false;
+	}
+
+	if (!loadPalette(archive) || !loadPaths(archive) || !loadTextures(archive) || !loadGeometry(archive)) {
+		_loading = false;
+		return false;
+	}
+
+	if (g_engine && g_engine->_renderer) {
+		buildBuffers(g_engine->_renderer);
+	}
+
+	_loading = false;
+	animate();
+	return true;
 }
 
 void Location::buildBuffers(Renderer *renderer) {
@@ -49,37 +125,60 @@ void Location::buildBuffers(Renderer *renderer) {
 	debug(0, "Murphy3D Pipeline: Built %d VBOs containing a total of %d vertices.", totalVBOs, totalVertices);
 }
 
+void Location::render() {
+	if (g_engine && g_engine->_renderer) {
+		render(g_engine->_renderer);
+	}
+}
+
 void Location::render(Renderer *renderer) {
 	if (!renderer)
 		return;
 
-	int drawCalls = 0;
-	int skippedNoVerts = 0;
-	int skippedNoTexture = 0;
+	updateY();
 
+	Math::Matrix4 rm1 = MathUtils::rotationX(_angle1);
+	Math::Matrix4 rm2 = MathUtils::rotationY(_angle2);
+	Math::Matrix4 tm = MathUtils::translation(_x, _y, _z);
+	Math::Matrix4 worldMat = tm * rm2 * rm1;
+
+	Math::Matrix4 viewMat = MathUtils::lookAtLH(
+		Math::Vector3d(0.0f, 0.0f, 0.0f),
+		Math::Vector3d(0.0f, 0.0f, 1.0f),
+		Math::Vector3d(0.0f, 1.0f, 0.0f));
+	float fov = (3.141592654f / 4.0f) / 0.95f;
+	Math::Matrix4 projMat = MathUtils::perspectiveFovLH(fov, 640.0f / 480.0f, 0.1f, 1000.0f);
+
+	renderer->updateMatrices(worldMat, viewMat, projMat);
 
 	for (uint i = 0; i < _textureGroups.size(); i++) {
-
-		if (_textureGroups[i].vertexCount > 0) {
-			if (_textures[i] != nullptr) {
-				renderer->bindTexture(_textures[i]->getId(), 0);
-
-				renderer->drawTexturedTriangles(_textureGroups[i].vbo, _textureGroups[i].vertexCount, 0);
-
-				drawCalls++;
-			} else {
-				skippedNoTexture++;
-			}
-		} else {
-			skippedNoVerts++; 
+		if (_textureGroups[i].vertexCount > 0 && _textures[i] != nullptr) {
+			renderer->bindTexture(_textures[i]->getId(), 0);
+			renderer->drawTexturedTriangles(_textureGroups[i].vbo, _textureGroups[i].vertexCount, 0);
 		}
 	}
+}
 
-	static int frameCounter = 0;
-	if (frameCounter++ % 60 == 0) {
-		debug(0, "Murphy3D Render Loop: %d Draw Calls executed. Skipped (No Texture): %d. Skipped (No Vertices): %d.",
-			  drawCalls, skippedNoTexture, skippedNoVerts);
-	}
+void Location::setPosition(StartupPosition pos) {
+	_x = -pos.x;
+	_y = -pos.y;
+	_y_player_adjustment = pos.initialEyeLevel;
+	_y_player_adjustment_min = pos.minYAdj;
+	_y_player_adjustment_max = pos.maxYAdj;
+	_y_elevation = pos.elevation;
+
+	_z = -pos.z;
+	_angle1 = 0.0f;
+	_angle2 = pos.angle;
+
+	_currentElevation = nullptr;
+}
+
+void Location::setPosition(float x, float y, float z, float angle) {
+	_x = x;
+	_y_player_adjustment = y;
+	_z = z;
+	_angle2 = angle;
 }
 
 bool Location::loadPaths(Archive &archive) {
@@ -152,139 +251,174 @@ bool Location::loadPaths(Archive &archive) {
 	return true;
 }
 
-Math::Vector3d Location::resolveCollision(const Math::Vector3d &startPos, const Math::Vector3d &targetPos) {
-	Math::Vector3d pp1 = startPos;
-	Math::Vector3d pp2 = targetPos;
+void Location::move(float mx, float my, float mz, float tmx) {
+	if (mx != 0.0f || my != 0.0f || mz != 0.0f) {
+		_pointingChanged = true;
+	}
 
-	bool collision = true;
-	Math::Vector3d currentTarget = pp2;
+	if (mx != 0.0f || mz != 0.0f) {
+		double nx = _x - (mz * sin(_angle2) - mx * cos(_angle2));
+		double nz = _z + (mz * cos(_angle2) + mx * sin(_angle2));
 
-	// the 2 pass loop, pass 0 checks for a wall hit and calculates the slide vector
-	// pass 1 checks if that new sliding vector hits a second wall (like a corner)
-	for (int pass = 0; pass < 2 && collision; pass++) {
-		collision = false;
+		Math::Vector3d pp1(-_x, -_y_elevation, -_z);
+		Math::Vector3d pp2((float)-nx, -_y_elevation, (float)-nz);
 
-		double closest_t = 10000.0;
-		double closest_u = 0.0;
-		double closest_dist = 10000.0;
+		bool collision = true;
+		for (int pass = 0; pass < 2 && collision; pass++) {
+			collision = false;
 
-		Math::Vector3d closestSegmentP1, closestSegmentP2;
+			double closest_t = 10000.0;
+			double closest_u = 0.0;
+			double closest_dist = 10000.0;
+			Math::Vector3d closestSegmentP1, closestSegmentP2;
 
-		// find the closest line segment across all enabled paths
-		for (uint i = 0; i < _paths.size(); i++) {
-			if (!_paths[i].enabled)
-				continue;
+			for (uint i = 0; i < _paths.size(); i++) {
+				if (!_paths[i].enabled)
+					continue;
 
-			for (uint p1_idx = 0; p1_idx < _paths[i].points.size(); p1_idx++) {
-				uint p2_idx = (p1_idx + 1) % _paths[i].points.size();
-				Math::Vector3d pt1 = _paths[i].points[p1_idx];
-				Math::Vector3d pt2 = _paths[i].points[p2_idx];
+				for (uint p1_idx = 0; p1_idx < _paths[i].points.size(); p1_idx++) {
+					uint p2_idx = (p1_idx + 1) % _paths[i].points.size();
+					Math::Vector3d pt1 = _paths[i].points[p1_idx];
+					Math::Vector3d pt2 = _paths[i].points[p2_idx];
 
-				double t = 0.0, u = 0.0;
-				double d = MathUtils::lineSegmentsDistanceXZ(pp1, pp2, pt1, pt2, t, u);
+					double t = 0.0, u = 0.0;
+					double d = MathUtils::lineSegmentsDistanceXZ(pp1, pp2, pt1, pt2, t, u);
 
-				// 0.5 is the player collision radius
-				if (d < 0.5 && d < closest_dist) {
-					closestSegmentP1 = pt1;
-					closestSegmentP2 = pt2;
-					closest_t = t;
-					closest_u = u;
-					closest_dist = d;
-					collision = true;
+					if (d < 0.5 && d < closest_dist) {
+						closestSegmentP1 = pt1;
+						closestSegmentP2 = pt2;
+						closest_t = t;
+						closest_u = u;
+						closest_dist = d;
+						collision = true;
+					}
+				}
+			}
+
+			if (collision) {
+				Math::Vector3d mp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, pp2);
+				Math::Vector3d pp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, pp1);
+
+				double playerDistanceToLine = sqrt(MathUtils::distanceSquaredXZ(pp1, pp));
+				double movementDistanceToLine = sqrt(MathUtils::distanceSquaredXZ(pp2, mp));
+
+				double distanceDelta = playerDistanceToLine - movementDistanceToLine;
+				double percentage = 1.0;
+
+				if (playerDistanceToLine > 0.5 && movementDistanceToLine <= 0.5) {
+					percentage = (distanceDelta - (0.5001 - movementDistanceToLine)) / distanceDelta;
+				} else if (playerDistanceToLine <= 0.5 && movementDistanceToLine >= playerDistanceToLine) {
+					percentage = 1.0;
+				} else if (playerDistanceToLine < 0.5 && movementDistanceToLine < playerDistanceToLine) {
+					nx = _x;
+					nz = _z;
+					break;
+				} else {
+					percentage = 0.0;
+				}
+
+				Math::Vector3d tp(
+					pp1.x() + (pp2.x() - pp1.x()) * (float)percentage,
+					0.0f,
+					pp1.z() + (pp2.z() - pp1.z()) * (float)percentage);
+				Math::Vector3d tpp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, tp);
+				Math::Vector3d tmp = mp - tpp;
+
+				pp1 = tp;
+				pp2 = Math::Vector3d(tp.x() + tmp.x(), 0.0f, tp.z() + tmp.z());
+
+				nx = (pass == 0) ? -pp2.x() : -tp.x();
+				nz = (pass == 0) ? -pp2.z() : -tp.z();
+			}
+		}
+
+		_x = (float)nx;
+		_z = (float)nz;
+
+		Math::Vector3d worldPos(-_x, -_y_elevation, -_z);
+		if (_currentElevation != nullptr) {
+			if (_currentElevation->isPointInElevation(worldPos)) {
+				_y_elevation = -_currentElevation->getElevationFromXZPosition(worldPos);
+			} else {
+				_y_elevation = -_currentElevation->getClosestElevation(-_y_elevation);
+			}
+			_currentElevation = nullptr;
+		}
+
+		if (_currentElevation == nullptr) {
+			for (uint i = 0; i < _elevations.size(); i++) {
+				if (_elevations[i].isPointInElevation(worldPos)) {
+					_y_elevation = -_elevations[i].getElevationFromXZPosition(worldPos);
+					_currentElevation = &_elevations[i];
+					break;
 				}
 			}
 		}
+	}
 
-		// if we hit a wall, calculate the slide
-		if (collision) {
-			// find nearest points on the wall to the player start and end positions
-			Math::Vector3d mp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, pp2);
-			Math::Vector3d pp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, pp1);
-
-			// distance from player start position to it's projection point on the line
-			double playerDistanceToLine = sqrt(MathUtils::distanceSquaredXZ(pp1, pp));
-			// distance from player end position to it's projection point on the line
-			double movementDistanceToLine = sqrt(MathUtils::distanceSquaredXZ(pp2, mp));
-
-			double distanceDelta = playerDistanceToLine - movementDistanceToLine;
-			double percentage = 1.0;
-
-			// determine how far along our movement vector we were before hitting the 0.5 radius
-			if (playerDistanceToLine > 0.5 && movementDistanceToLine <= 0.5) {
-				percentage = (playerDistanceToLine - 0.5001) / distanceDelta;
-			} else if (playerDistanceToLine <= 0.5 && movementDistanceToLine >= playerDistanceToLine) {
-				percentage = 1.0;
-			} else if (playerDistanceToLine < 0.5 && movementDistanceToLine < playerDistanceToLine) {
-				// if we are already deep inside a wall's radius and trying to push deeper,
-				// completely abandon all movement for this frame
-				return startPos;
-			} else {
-				percentage = 0.0;
-			}
-
-			// tp is the exact point of impact
-			Math::Vector3d tp(pp1.x() + (pp2.x() - pp1.x()) * percentage, startPos.y(),
-				pp1.z() + (pp2.z() - pp1.z()) * percentage);
-
-			// calculate the slide vector parallel to the wall
-			Math::Vector3d tpp = MathUtils::projectXZ(closestSegmentP1, closestSegmentP2, tp);
-			Math::Vector3d tmp = mp - tpp;
-
-			// for pass 1 (in case we slide into a corner)
-			pp1 = tp;
-			pp2 = Math::Vector3d(tp.x() + tmp.x(), startPos.y(), tp.z() + tmp.z());
-
-			// if this is pass 0, we intend to move to the slide point (pp2)
-			// if this is pass 1, we hit a second wall while sliding, so we just stop at the impact point (tp)
-			currentTarget = (pass == 0) ? pp2 : tp;
-		} else {
-			// no collision on this pass, target is safe
-			currentTarget = pp2;
+	if (my != 0.0f) {
+		float miny = _y_player_adjustment_min;
+		float maxy = _y_player_adjustment_max;
+		if (_y_player_adjustment <= maxy && _y_player_adjustment >= miny) {
+			_y_player_adjustment += (my < 0.0f) ? MAX(my, miny - _y_player_adjustment) : MIN(my, maxy - _y_player_adjustment);
 		}
 	}
 
-	if (_currentElevation != nullptr) {
-		if (_currentElevation->isPointInElevation(currentTarget)) {
-			currentTarget.y() = _currentElevation->getElevationFromXZPosition(currentTarget);
-		} else {
-			currentTarget.y() = _currentElevation->getClosestElevation(currentTarget.y());
-		}
-		_currentElevation = nullptr;
-	}
-
-	if (_currentElevation == nullptr) {
-		for (uint i = 0; i < _elevations.size(); i++) {
-			if (_elevations[i].isPointInElevation(currentTarget)) {
-				currentTarget.y() = _elevations[i].getElevationFromXZPosition(currentTarget);
-				_currentElevation = &_elevations[i];
-				break;
-			}
-		}
-	}
-
-	return currentTarget;
+	updateSprites();
 }
 
-bool Location::load(const Common::String &filename) {
-	Archive archive;
+void Location::deltaAngles(float angle1, float angle2) {
+	if (angle1 != 0.0f || angle2 != 0.0f) {
+		_pointingChanged = true;
+	}
 
-	// location files are AP files with at least 7 entries
-	if (!archive.open(Common::Path(filename)))
-		return false;
+	_angle1 -= angle1;
+	_angle2 -= angle2;
 
-	if (!loadPalette(archive))
-		return false;
+	while (_angle2 < 0.0f) {
+		_angle2 += kTwoPi;
+	}
+	while (_angle2 > kTwoPi) {
+		_angle2 -= kTwoPi;
+	}
 
-	if (!loadPaths(archive))
-		return false;
+	if (_angle1 > kHalfPi)
+		_angle1 = kHalfPi;
+	else if (_angle1 < -kHalfPi)
+		_angle1 = -kHalfPi;
+}
 
-	if (!loadTextures(archive))
-		return false;
+void Location::updateSprites() {
+	// TODO: Dynamic billboard sprite rotation when sprite VBOs are separated
+}
 
-	if (!loadGeometry(archive))
-		return false;
+void Location::animate() {
+	// TODO: Port location object animations (types 1, 2, 3, 4, 14, 15)
+}
 
-	return true;
+int Location::getPickObject(int &objectId, int &subObjectId) {
+	if (_loading)
+		return -1;
+	_pointingChanged = false;
+	return -1; // TODO: Raycast with MathUtils::intersectsTriangle once objectMap is loaded
+}
+
+void Location::setObjectVisibility(int objectId, bool visible) {
+	// TODO: object visibility buffer
+}
+
+double Location::getPlayerDistanceFromPoint(double x, double z) {
+	double dx = -_x - x;
+	double dz = -_z - z;
+	return dx * dx + dz * dz;
+}
+
+Math::Vector3d Location::getPlayerPosition() {
+	return Math::Vector3d(-_x, _y_elevation + _y_player_adjustment, -_z);
+}
+
+Math::Vector3d Location::getUnadjustedPlayerPosition() {
+	return Math::Vector3d(-_x, _y_elevation, -_z);
 }
 
 void Location::addTriangleToGroup(int32 textureIndex, uint32 flags,

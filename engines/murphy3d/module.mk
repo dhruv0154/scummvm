@@ -14,7 +14,6 @@ MODULE_OBJS = \
 	uakm_map.o \
 	map.o \
 	location.o \
-	player.o \
 	main_menu.o \
 	text.o \
 	control.o \
