@@ -53,8 +53,6 @@ LocationModule::LocationModule(int locationId, int startupPosition)
 		_scriptEngine->_pLoc = &_location;
 	}
 
-	resize(g_system->getWidth(), g_system->getHeight());
-
 	_actionScriptState = GameController::getScriptState();
 	_environmentScriptState = GameController::getScriptState();
 	_queryActionScriptState = GameController::getScriptState();
@@ -66,6 +64,8 @@ LocationModule::LocationModule(int locationId, int startupPosition)
 	_currentActionColour2 = _currentActionColour3 = 0xffffff00;
 	_unavailableActionColour1 = _unavailableActionColour4 = 0;
 	_unavailableActionColour2 = _unavailableActionColour3 = 0xff808080;
+
+	resize(g_system->getWidth(), g_system->getHeight());
 }
 
 LocationModule::~LocationModule() {
@@ -145,6 +145,14 @@ void LocationModule::render() {
 
 		if (!waitingForInput && !_environmentScriptState->_waitingForMediaToFinish && !_actionScriptState->_waitingForMediaToFinish && !_initScriptState->_waitingForMediaToFinish) {
 			_scriptEngine->execute(_environmentScriptState, GameController::getLocationEnvironmentScriptId());
+		} else {
+			if (_initScriptState->_waitingForMediaToFinish) {
+				_scriptEngine->resume(_initScriptState, true);
+			} else if (_actionScriptState->_waitingForMediaToFinish) {
+				_scriptEngine->resume(_actionScriptState, true);
+			} else if (_environmentScriptState->_waitingForMediaToFinish) {
+				_scriptEngine->resume(_environmentScriptState, true);
+			}
 		}
 	} else {
 		_location.animate();
