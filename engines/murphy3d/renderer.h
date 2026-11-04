@@ -31,6 +31,7 @@ public:
 	void drawTexturedTriangles(GLuint vbo, uint32 vertexCount, uint32 startVertex = 0);
 	void drawUI(GLuint vbo, uint32 vertexCount, GLuint textureId, const Math::Matrix4 &worldMat);
 	void drawUITextured(GLuint vbo, uint32 vertexCount, GLuint textureId, const Math::Matrix4 &worldMat);
+	void setFontColours(const Math::Vector4d &c1, const Math::Vector4d &c2, const Math::Vector4d &c3, const Math::Vector4d &c4);
 
 private:
 	ShaderManager *_shaderManager;

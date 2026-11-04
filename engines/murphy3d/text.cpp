@@ -5,10 +5,10 @@
 namespace Murphy3d {
 
 Text::Text(Font *font) : _font(font), _vbo(0), _lines(0), _width(0.0f) {
-	_colour1 = 0xFFFFFFFF;
+	_colour1 = 0x00000000;
 	_colour2 = 0xFFFFFFFF;
 	_colour3 = 0xFFFFFFFF;
-	_colour4 = 0xFFFFFFFF;
+	_colour4 = 0x00000000;
 }
 
 Text::~Text() {
@@ -19,8 +19,12 @@ Text::~Text() {
 }
 
 void Text::setColours(uint32 c1, uint32 c2, uint32 c3, uint32 c4) {
-	if (_colour1 == c1 && _colour2 == c2 && _colour3 == c3 && _colour4 == c4)
-		return;
+	if (c2 == 0 && c3 == 0 && c4 == 0 && c1 != 0) {
+		c2 = c1;
+		c3 = c1;
+		c1 = 0;
+		c4 = 0;
+	}
 
 	_colour1 = c1;
 	_colour2 = c2;
@@ -48,6 +52,14 @@ void Text::extractRGB(uint32 color, float &r, float &g, float &b) {
 	b = (color & 0xFF) / 255.0f;
 }
 
+Math::Vector4d Text::toVec4(uint32 color) const {
+	float a = ((color >> 24) & 0xFF) / 255.0f;
+	float r = ((color >> 16) & 0xFF) / 255.0f;
+	float g = ((color >> 8) & 0xFF) / 255.0f;
+	float b = (color & 0xFF) / 255.0f;
+	return Math::Vector4d(r, g, b, a);
+}
+
 void Text::setText(const Common::String &text, float scale) {
 	Rect rect = {0.0f, 0.0f, 640.0f, 480.0f};
 	setText(text, rect, kAlignLeft, scale);
@@ -55,6 +67,11 @@ void Text::setText(const Common::String &text, float scale) {
 
 void Text::setText(const Common::String &text, const Rect &rect, TextAlignment alignment, float scale) {
 	_vertices.clear();
+	if (_vbo != 0 && g_engine && g_engine->_renderer) {
+		g_engine->_renderer->deleteBuffer(_vbo);
+		_vbo = 0;
+	}
+
 	if (!_font && g_engine)
 		_font = g_engine->_font;
 	if (text.empty() || !_font)
@@ -79,23 +96,22 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 				w.pixels = pixels;
 				w.text = text.substr(start, len);
 				words.push_back(w);
+			}
+			start = i + 1;
+			pixels = 0.0f;
 
-				start = i + 1;
-				pixels = 0.0f;
-
-				if (c == '<')
-					currentCol = _colour2;
-				else if (c == '~')
-					currentCol = _colour3;
-				else if (c == '>' || c == '@')
-					currentCol = defaultCol;
-				else if (c == '\n') {
-					Word nl;
-					nl.text = "\n";
-					nl.pixels = 0.0f;
-					nl.color = currentCol;
-					words.push_back(nl);
-				}
+			if (c == '<')
+				currentCol = _colour2;
+			else if (c == '~')
+				currentCol = _colour3;
+			else if (c == '>' || c == '@')
+				currentCol = defaultCol;
+			else if (c == '\n') {
+				Word nl;
+				nl.text = "\n";
+				nl.pixels = 0.0f;
+				nl.color = currentCol;
+				words.push_back(nl);
 			}
 		} else if (c == '^' && i + 1 < text.size()) {
 			char cix = text[++i];
@@ -152,7 +168,7 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 			sx += pixelsLeft / 2.0f;
 		} else if (alignment == kAlignRight) {
 			sx += pixelsLeft;
-		} else if (alignment == kAlignJustify && wordsInLine > 1 && linePixels > 0) {
+		} else if (alignment == kAlignJustify && wordIndex < words.size() && wordsInLine > 1 && linePixels > 0) {
 			justifyAdjust = pixelsLeft / (wordsInLine - 1);
 		}
 
@@ -191,17 +207,15 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 	}
 
 	if (_vertices.size() > 0 && g_engine && g_engine->_renderer) {
-		if (_vbo == 0) {
-			_vbo = g_engine->_renderer->createVertexBuffer(_vertices.data(), _vertices.size() * sizeof(MULTICOLOURED_FONT_VERTEX), true);
-		} else {
-			g_engine->_renderer->updateBufferData(_vbo, _vertices.data(), _vertices.size() * sizeof(MULTICOLOURED_FONT_VERTEX), 0);
-		}
+		_vbo = g_engine->_renderer->createVertexBuffer(_vertices.data(), _vertices.size() * sizeof(MULTICOLOURED_FONT_VERTEX), true);
 	}
 }
 
 void Text::render(Renderer *renderer, float x, float y, float z) {
 	if (_vertices.empty() || !_vbo || !_font || !_font->getTexture())
 		return;
+
+	renderer->setFontColours(toVec4(_colour1), toVec4(_colour2), toVec4(_colour3), toVec4(_colour4));
 
 	Math::Matrix4 worldMat = MathUtils::translation(floor(x), -floor(y), z);
 	renderer->drawUI(_vbo, _vertices.size(), _font->getTexture()->getId(), worldMat);

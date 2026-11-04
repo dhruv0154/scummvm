@@ -2,6 +2,8 @@
 #define MURPHY3D_UAKM_SCRIPT_H
 
 #include "murphy3d/script_base.h"
+#include "common/list.h"
+#include "murphy3d/caption.h"
 
 namespace Murphy3d {
 
@@ -118,6 +120,7 @@ protected:
 	void function_E0(ScriptState *pState);
 
 	void addCaption(ScriptState *pState, bool texTalk);
+	void play(ScriptState *pState, int index, int bank, int rate);
 };
 
 } // End of namespace Murphy3d

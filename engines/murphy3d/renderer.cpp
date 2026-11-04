@@ -163,4 +163,17 @@ void Renderer::drawUITextured(GLuint vbo, uint32 vertexCount, GLuint textureId, 
 	glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::setFontColours(const Math::Vector4d &c1, const Math::Vector4d &c2, const Math::Vector4d &c3, const Math::Vector4d &c4) {
+	if (!_shaderManager)
+		return;
+	OpenGL::Shader *shader = _shaderManager->getUIFontShader();
+	if (shader) {
+		shader->use();
+		shader->setUniform("color1", c1);
+		shader->setUniform("color2", c2);
+		shader->setUniform("color3", c3);
+		shader->setUniform("color4", c4);
+	}
+}
+
 } // End of namespace Murphy3d

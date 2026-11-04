@@ -4,6 +4,8 @@
 #include "murphy3d/location_module.h"
 #include "murphy3d/module_controller.h"
 #include "murphy3d/uakm_game.h"
+#include "murphy3d/animation_controller.h"
+#include "murphy3d/ambient_audio.h"
 
 namespace Murphy3d {
 
@@ -147,6 +149,12 @@ void UAKMScript::resume(ScriptState *pState, bool breakWait) {
 
 		(this->*_functions[cmd - 0x80])(pState);
 	}
+
+	if (ModuleController::_currentModule != pThisModule) {
+		if (!pState->_waitingForInput) {
+			ModuleController::pop(pThisModule);
+		}
+	}
 }
 
 ActionType UAKMScript::getCurrentActions(ScriptState *pState, int currentObjectIndex) {
@@ -193,7 +201,25 @@ void UAKMScript::addCaption(ScriptState *pState, bool texTalk) {
 			break;
 		text += c;
 	}
-	debug(0, "UAKMScript Caption (%s): %s", texTalk ? "Tex" : "NPC", text.c_str());
+	Caption::add(pState->_frameTrigger, text, texTalk);
+}
+
+void UAKMScript::play(ScriptState *pState, int index, int bank, int rate) {
+	Caption::swapCaptions();
+
+	if (_mapEntry != nullptr && (_mapEntry->scriptFileEntry != 0 || _mapEntry->scriptFileIndex != 0)) {
+		const Common::Array<FileMap> &map = (bank == 1) ? _mapEntry->videoMap : _mapEntry->audioMap;
+		if (index >= 0 && (uint)index < map.size()) {
+			FileMap fm = map[index];
+			Common::String fn = GameController::getFileName(fm.file);
+			debug(0, "UAKMScript::play(index=%d, bank=%d, rate=%d) -> '%s' entry %d", index, bank, rate, fn.c_str(), fm.entry);
+			if (!fn.empty()) {
+				AnimationController::load(fn, fm.entry, rate);
+			}
+		}
+	}
+
+	pState->_waitingForMediaToFinish = AnimationController::exists();
 }
 
 // 0x80: End of script block
@@ -204,9 +230,13 @@ void UAKMScript::function_80(ScriptState *pState) {
 // 0x81: Default Use fallback ("That's not gonna work.")
 void UAKMScript::function_81(ScriptState *pState) {
 	if (pState->_currentAction == ActionType::kUse) {
-		debug(0, "UAKMScript Caption (Tex): That's not gonna work.");
-		pState->_executionPointer = -1;
+		Caption::clearAddCaptions();
+		Caption::add(0, "That's not gonna work.", true);
+		Caption::swapCaptions();
+		AnimationController::load("SOUND.AP", 0);
+		pState->_waitingForMediaToFinish = true;
 	}
+	pState->_executionPointer = -1;
 }
 
 // 0x82: Jump if CurrentAction == Look
@@ -267,16 +297,12 @@ void UAKMScript::function_88(ScriptState *pState) {
 
 // 0x89: Display text caption and end script
 void UAKMScript::function_89(ScriptState *pState) {
-	addCaption(pState, true);
 	pState->_executionPointer = -1;
 }
 
 // 0x8A: Play sound + display text caption
 void UAKMScript::function_8A(ScriptState *pState) {
-	int soundId = pState->read16();
-	(void)soundId;
-	addCaption(pState, true);
-	pState->_waitingForMediaToFinish = true;
+	pState->_executionPointer = -1;
 }
 
 // 0x8B: Start mapped location Animation
@@ -331,6 +357,7 @@ void UAKMScript::function_90(ScriptState *pState) {
 void UAKMScript::function_91(ScriptState *pState) {
 	int bix = pState->read16();
 	int cmp = pState->read8();
+	pState->read8(); // padding byte at +3
 	int ns = pState->read16();
 	if (GameController::getItemState(bix) == cmp) {
 		pState->_executionPointer = pState->getScript(ns);
@@ -344,6 +371,7 @@ void UAKMScript::function_92(ScriptState *pState) {
 
 // 0x93: Load 3D Location (Map entry)
 void UAKMScript::function_93(ScriptState *pState) {
+	AmbientAudio::clear();
 	int locationId = pState->read8();
 	GameController::setParameter(252, 0);
 	GameController::setWord(UAKM_SAVE_MAP_ENTRY, locationId);
@@ -376,15 +404,16 @@ void UAKMScript::function_95(ScriptState *pState) {
 // 0x96: Conditional jump if animation is finished
 void UAKMScript::function_96(ScriptState *pState) {
 	int anim = pState->read8();
+	pState->read8(); // padding byte at +1
 	int ns = pState->read16();
 	(void)anim;
 	pState->_executionPointer = pState->getScript(ns);
 }
 
-// 0x97: Play audio clip
+// 0x97: Play ambient sound (1 byte)
 void UAKMScript::function_97(ScriptState *pState) {
-	int soundIndex = pState->read8();
-	(void)soundIndex;
+	int soundIndex = pState->read8() - 1;
+	AmbientAudio::play(_mapEntry, soundIndex, true);
 }
 
 // 0x98: Conditional jump if player Y > ylimit
@@ -479,7 +508,10 @@ void UAKMScript::function_A6(ScriptState *pState) { pState->_executionPointer = 
 
 // 0xA7: Play scripted PTF video (8 bytes)
 void UAKMScript::function_A7(ScriptState *pState) {
-	pState->_executionPointer += 8;
+	pState->read32();
+	int index = pState->read16();
+	int rate = pState->read16();
+	play(pState, index, 1, rate);
 }
 
 // 0xA8: Set Save Script ID (2 bytes)
@@ -578,9 +610,10 @@ void UAKMScript::function_BA(ScriptState *pState) {
 	pState->_allowedAction = ActionType::kNone;
 }
 
-// 0xBB: Ambient audio map trigger (2 bytes)
+// 0xBB: Loop ambient audio (2 bytes)
 void UAKMScript::function_BB(ScriptState *pState) {
-	pState->read16();
+	int ix = pState->read16();
+	AmbientAudio::loop(_mapEntry, ix, -1);
 }
 
 void UAKMScript::function_BC(ScriptState *pState) {}
@@ -668,7 +701,8 @@ void UAKMScript::function_D0(ScriptState *pState) {
 
 // 0xD1: Play sound effect (1 byte)
 void UAKMScript::function_D1(ScriptState *pState) {
-	pState->read8();
+	int index = pState->read8();
+	play(pState, index, 0, 0);
 }
 
 void UAKMScript::function_D2(ScriptState *pState) { pState->_executionPointer = -1; }
@@ -676,7 +710,8 @@ void UAKMScript::function_D3(ScriptState *pState) { pState->_executionPointer = 
 
 // 0xD4: Stop ambient sound (1 byte)
 void UAKMScript::function_D4(ScriptState *pState) {
-	pState->read8();
+	int index = pState->read8();
+	AmbientAudio::stop(index & 0x7f);
 }
 
 // 0xD5: Load MIDI (4 bytes)
@@ -701,8 +736,19 @@ void UAKMScript::function_DA(ScriptState *pState) {
 }
 
 // 0xDB & 0xDC: Play video (8 bytes)
-void UAKMScript::function_DB(ScriptState *pState) { pState->_executionPointer += 8; }
-void UAKMScript::function_DC(ScriptState *pState) { pState->_executionPointer += 8; }
+void UAKMScript::function_DB(ScriptState *pState) {
+	pState->read32();
+	int index = pState->read16();
+	int rate = pState->read16();
+	play(pState, index, 1, rate);
+}
+
+void UAKMScript::function_DC(ScriptState *pState) {
+	pState->read32();
+	int index = pState->read16();
+	int rate = pState->read16();
+	play(pState, index, 1, rate);
+}
 
 void UAKMScript::function_DD(ScriptState *pState) { pState->_executionPointer = -1; }
 void UAKMScript::function_DE(ScriptState *pState) { pState->_executionPointer = -1; }

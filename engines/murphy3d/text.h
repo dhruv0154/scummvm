@@ -7,6 +7,7 @@
 #include "murphy3d/font.h"
 #include "murphy3d/renderer.h"
 #include "murphy3d/shader_structs.h"
+#include "math/vector4d.h"
 
 namespace Murphy3d {
 
@@ -39,6 +40,7 @@ public:
 
 	int getLines() const { return _lines; }
 	float getWidth() const { return _width; }
+	float getHeight() const { return _font ? (_font->getHeight() * _lines) : 0.0f; }
 
 private:
 	Font *_font;
@@ -57,6 +59,7 @@ private:
 	};
 
 	void extractRGB(uint32 color, float &r, float &g, float &b);
+	Math::Vector4d toVec4(uint32 color) const;
 };
 
 } // End of namespace Murphy3d

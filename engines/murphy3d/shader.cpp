@@ -111,12 +111,16 @@ const char *ShaderManager::getPixelShaderUIFont() {
 		   "in vec4 VertColor;\n"
 		   "OUTPUT\n"
 		   "uniform sampler2D texture1;\n"
+		   "uniform vec4 color1;\n"
+		   "uniform vec4 color2;\n"
+		   "uniform vec4 color3;\n"
+		   "uniform vec4 color4;\n"
 		   "void main() {\n"
-		   "    vec4 l1 = texture(texture1, vec2(TexCoord.x, TexCoord.y - 0.50));\n" // top half
-		   "    vec4 l2 = texture(texture1, vec2(TexCoord.x, TexCoord.y - 0.25));\n" // bottom half
-		   "    vec4 topBase = l1.a * VertColor;\n"
-		   "    vec4 botBase = l2.a * VertColor;\n"
-		   "    outColor = topBase + botBase;\n"
+		   "    vec4 l0 = texture(texture1, vec2(TexCoord.x, TexCoord.y - 0.75));\n"
+		   "    vec4 l1 = texture(texture1, vec2(TexCoord.x, TexCoord.y - 0.50));\n"
+		   "    vec4 l2 = texture(texture1, vec2(TexCoord.x, TexCoord.y - 0.25));\n"
+		   "    vec4 l3 = texture(texture1, vec2(TexCoord.x, TexCoord.y));\n"
+		   "    outColor = l0.a * color1 + l1.a * color2 + l2.a * color3 + l3.a * color4;\n"
 		   "    if (outColor.a < 0.1) discard;\n"
 		   "}\n";
 }
