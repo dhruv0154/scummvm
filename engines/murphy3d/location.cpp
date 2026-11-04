@@ -396,13 +396,131 @@ void Location::animate() {
 	// TODO: Port location object animations (types 1, 2, 3, 4, 14, 15)
 }
 
-int Location::getPickObject(int &objectId, int &subObjectId) {
-	if (_loading)
-		return -1;
-	_pointingChanged = false;
-	return -1; // TODO: Raycast with MathUtils::intersectsTriangle once objectMap is loaded
+bool Location::intersect(const Box &boundingBox, const Math::Vector3d &from, const Math::Vector3d &invDir) {
+	float t1 = (boundingBox.x1 - from.x()) * invDir.x();
+	float t2 = (boundingBox.x2 - from.x()) * invDir.x();
+	float t3 = (boundingBox.y1 - from.y()) * invDir.y();
+	float t4 = (boundingBox.y2 - from.y()) * invDir.y();
+	float t5 = (boundingBox.z1 - from.z()) * invDir.z();
+	float t6 = (boundingBox.z2 - from.z()) * invDir.z();
+
+	float tmin = MAX(MAX(MIN(t1, t2), MIN(t3, t4)), MIN(t5, t6));
+	float tmax = MIN(MIN(MAX(t1, t2), MAX(t3, t4)), MAX(t5, t6));
+
+	return (tmax >= 0.0f && tmax >= tmin);
 }
 
+int Location::getPickObject(int &objectId, int &subObjectId) {
+	if (_loading) {
+		return -1;
+	}
+
+	_pointingChanged = false;
+	objectId = -1;
+	subObjectId = -1;
+
+	Math::Vector3d ld(
+		cos(_angle1) * sin(-_angle2),
+		sin(_angle1),
+		cos(_angle1) * cos(-_angle2));
+
+	Math::Vector3d invDir(
+		(ld.x() != 0.0f) ? (1.0f / ld.x()) : 1e30f,
+		(ld.y() != 0.0f) ? (1.0f / ld.y()) : 1e30f,
+		(ld.z() != 0.0f) ? (1.0f / ld.z()) : 1e30f);
+
+	// camera eye position in world space
+	Math::Vector3d teye(-_x, -_y, -_z);
+
+	float distance = 1000000.0f;
+
+	for (int i = 0; i < (int)_objects.size(); i++) {
+		if (!_objects[i].visible)
+			continue;
+
+		if (intersect(_objects[i].boundingBox, teye, invDir)) {
+			for (int j = 0; j < (int)_objects[i].subObjects.size(); j++) {
+				const LocationSubObject &subObj = _objects[i].subObjects[j];
+
+				if (subObj.flags != 0 && subObj.visible) {
+					if (intersect(subObj.boundingBox, teye, invDir)) {
+						float td = 10000.0f;
+
+						if (subObj.pointCount == 1) {
+							float y1 = subObj.boundingBox.y1;
+							float y2 = subObj.boundingBox.y2;
+							float cx = (subObj.boundingBox.x1 + subObj.boundingBox.x2) / 2.0f;
+							float cz = (subObj.boundingBox.z1 + subObj.boundingBox.z2) / 2.0f;
+							float w = subObj.boundingBox.x2 - subObj.boundingBox.x1;
+
+							float svx = teye.x() - cx;
+							float svz = teye.z() - cz;
+							float len = sqrt(svx * svx + svz * svz);
+							if (len == 0.0f)
+								len = 1.0f;
+							svx /= len;
+							svz /= len;
+
+							float ppx = svz;
+							float ppz = -svx;
+
+							float ax = ppx * w / 2.0f;
+							float az = ppz * w / 2.0f;
+
+							Math::Vector3d v0(cx - ax, y1, cz - az);
+							Math::Vector3d v1(cx + ax, y1, cz + az);
+							Math::Vector3d v2(cx - ax, y2, cz - az);
+							Math::Vector3d v3(cx + ax, y2, cz + az);
+
+							if (MathUtils::intersectsTriangle(teye, ld, v0, v3, v2, td) ||
+								MathUtils::intersectsTriangle(teye, ld, v0, v1, v3, td)) {
+								if (td <= distance) {
+									objectId = i;
+									subObjectId = (int)subObj.id;
+									distance = td;
+								}
+							}
+						} else {
+							for (uint t = 0; t < subObj.triangles.size(); t++) {
+								const LocationTriangle &tri = subObj.triangles[t];
+								if (MathUtils::intersectsTriangle(teye, ld, tri.p1, tri.p2, tri.p3, td)) {
+									if (td <= distance) {
+										objectId = i;
+										subObjectId = (int)subObj.id;
+										distance = td;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	_hitObject = objectId;
+	_hitSubObject = subObjectId;
+	int prevObjectIndex = _objectIndex;
+	_objectIndex = -1;
+
+	if (_hitObject >= 0 && _mapEntry != nullptr) {
+		for (uint ix = 0; ix < _mapEntry->objectMap.size(); ix++) {
+			int oid = (int)_mapEntry->objectMap[ix];
+			if (((_hitSubObject & 0x80000000) != 0 && _hitSubObject == oid) ||
+				((_hitSubObject & 0x08000000) != 0 && oid == ((_hitSubObject >> 16) & 0xffff)) ||
+				((_hitSubObject & 0x88000000) == 0 && _hitObject == oid)) {
+				_objectIndex = (int)ix;
+				break;
+			}
+		}
+	}
+
+	if (_objectIndex != prevObjectIndex) {
+		debug(0, "Murphy3D Pick: ObjectIndex = %d (HitObject = %d, HitSubObject = 0x%x)", _objectIndex, _hitObject, _hitSubObject);
+	}
+
+	return _objectIndex;
+}
 void Location::setObjectVisibility(int objectId, bool visible) {
 	// TODO: object visibility buffer
 }
@@ -548,6 +666,11 @@ bool Location::loadGeometry(Archive &archive) {
 
 		// object flags (0x80000000 = object is hidden)
 		_objects[i].flags = READ_LE_UINT32(p3d2 + objectOffset);
+		_objects[i].visible = objVisible[i];
+
+		float ominx = 10000.0f, omaxx = -10000.0f;
+		float ominy = 10000.0f, omaxy = -10000.0f;
+		float ominz = 10000.0f, omaxz = -10000.0f;
 
 		// number of sub-objects
 		uint32 subObjectsCount = READ_LE_UINT32(p3d2 + objectOffset + 12);
@@ -555,6 +678,10 @@ bool Location::loadGeometry(Archive &archive) {
 
 		uint32 nextSubOffset = objectOffset + 40;
 		for (uint32 j = 0; j < subObjectsCount; j++) {
+			float sminx = 10000.0f, smaxx = -10000.0f;
+			float sminy = 10000.0f, smaxy = -10000.0f;
+			float sminz = 10000.0f, smaxz = -10000.0f;
+
 			uint32 thisSubOffset = nextSubOffset;
 			// pointer to next sub-object, add 0x30
 			nextSubOffset = READ_LE_UINT32(p3d2 + nextSubOffset) + 0x30;
@@ -562,13 +689,13 @@ bool Location::loadGeometry(Archive &archive) {
 			LocationSubObject &subObj = _objects[i].subObjects[j];
 			uint32 points = READ_LE_UINT32(p3d2 + thisSubOffset + 4);
 
+			subObj.pointCount = points;
 			// sub-object flags (e.g., 0x00000002 = textured, 0x00000004 = sprite)
 			subObj.flags = READ_LE_UINT32(p3d2 + thisSubOffset + 8);
 			subObj.id = READ_LE_UINT32(p3d2 + thisSubOffset + 0x0C);
+			subObj.visible = ((subObj.flags & 0x80000000) == 0);
 			subObj.textureIndex = (int32)READ_LE_UINT32(p3d2 + thisSubOffset + 0x24);
-
-			if (!objVisible[i] || (subObj.flags & 0x80000000) != 0)
-				continue;
+			subObj.triangles.clear();
 
 			if (points == 1 && (subObj.flags & 4)) {
 				// sprite logic
@@ -608,16 +735,31 @@ bool Location::loadGeometry(Archive &archive) {
 						float x2 = center.x() - OX;
 						float z = center.z();
 
-						PolygonPoint p0 = {Math::Vector3d(x1, sy1, z), texX2 / tw, texY2 / th}; // Bottom Left
-						PolygonPoint p1 = {Math::Vector3d(x2, sy1, z), texX1 / tw, texY2 / th}; // Bottom Right
-						PolygonPoint p2 = {Math::Vector3d(x2, sy2, z), texX1 / tw, texY1 / th}; // Top Right
-						PolygonPoint p3 = {Math::Vector3d(x1, sy2, z), texX2 / tw, texY1 / th}; // Top Left
+						if (_objects[i].visible && subObj.visible) {
+							PolygonPoint p0 = {Math::Vector3d(x1, sy1, z), texX2 / tw, texY2 / th}; // Bottom Left
+							PolygonPoint p1 = {Math::Vector3d(x2, sy1, z), texX1 / tw, texY2 / th}; // Bottom Right
+							PolygonPoint p2 = {Math::Vector3d(x2, sy2, z), texX1 / tw, texY1 / th}; // Top Right
+							PolygonPoint p3 = {Math::Vector3d(x1, sy2, z), texX2 / tw, texY1 / th}; // Top Left
 
-						addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p2, p1);
-						addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p3, p2);
+							addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p2, p1);
+							addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p3, p2);
+						}
+
+						if ((center.x() - W / 2.0f) < sminx)
+							sminx = center.x() - W / 2.0f;
+						if ((center.x() + W / 2.0f) > smaxx)
+							smaxx = center.x() + W / 2.0f;
+						if ((center.y() - H) < sminy)
+							sminy = center.y() - H;
+						if (center.y() > smaxy)
+							smaxy = center.y();
+						if ((center.z() - W / 2.0f) < sminz)
+							sminz = center.z() - W / 2.0f;
+						if ((center.z() + W / 2.0f) > smaxz)
+							smaxz = center.z() + W / 2.0f;
 					}
 				}
-			} else if (points > 2 && (subObj.flags & 2)) {
+			} else if (points > 2) {
 
 				float tw = 1.0f, th = 1.0f;
 				if (subObj.textureIndex >= 0 && (uint32)subObj.textureIndex < _textures.size() && _textures[subObj.textureIndex]) {
@@ -649,6 +791,19 @@ bool Location::loadGeometry(Archive &archive) {
 						polyPoints[p].u = CLIP(fu / tw, 0.0f, 1.0f);
 						polyPoints[p].v = CLIP(fv / th, 0.0f, 1.0f);
 					}
+
+					if(polyPoints[p].pos.x() < sminx)
+						sminx = polyPoints[p].pos.x();
+					if (polyPoints[p].pos.x() > smaxx)
+						smaxx = polyPoints[p].pos.x();
+					if (polyPoints[p].pos.y() < sminy)
+						sminy = polyPoints[p].pos.y();
+					if (polyPoints[p].pos.y() > smaxy)
+						smaxy = polyPoints[p].pos.y();
+					if (polyPoints[p].pos.z() < sminz)
+						sminz = polyPoints[p].pos.z();
+					if (polyPoints[p].pos.z() > smaxz)
+						smaxz = polyPoints[p].pos.z();
 				}
 
 				int startp = 0;
@@ -681,7 +836,11 @@ bool Location::loadGeometry(Archive &archive) {
 						fabs(v1.y() - v2.y()) > 0.001f ||
 						fabs(v1.z() - v2.z()) > 0.001f) {
 
-						addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p2, p1);
+						if (_objects[i].visible && subObj.visible && (subObj.flags & 2)) {
+							addTriangleToGroup(subObj.textureIndex, subObj.flags, p0, p2, p1);
+						}
+
+						subObj.triangles.push_back({p0.pos, p2.pos, p1.pos});
 						polyPoints.remove_at(prev1);
 						pointsLeft--;
 						failsafe = pointsLeft * 3;
@@ -694,7 +853,24 @@ bool Location::loadGeometry(Archive &archive) {
 						startp -= pointsLeft;
 				}
 			}
+
+			subObj.boundingBox = {sminx, sminy, sminz, smaxx, smaxy, smaxz};
+
+			if (sminx < ominx)
+				ominx = sminx;
+			if (sminy < ominy)
+				ominy = sminy;
+			if (sminz < ominz)
+				ominz = sminz;
+			if (smaxx > omaxx)
+				omaxx = smaxx;
+			if (smaxy > omaxy)
+				omaxy = smaxy;
+			if (smaxz > omaxz)
+				omaxz = smaxz;
 		}
+
+		_objects[i].boundingBox = {ominx, ominy, ominz, omaxx, omaxy, omaxz};
 	}
 
 	delete[] p3d2;
