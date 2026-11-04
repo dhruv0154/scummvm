@@ -15,10 +15,10 @@ Map *ModuleController::_pMap = nullptr;
 Map *ModuleController::_pDMap = nullptr;
 
 bool ModuleController::init(Map *map, Map *dmap) {
-	if (map != nullptr && dmap != nullptr) {
+	if (map != nullptr) {
 		_pMap = map;
 		_pDMap = dmap;
-		bool ret = (map->init() && dmap->init());
+		bool ret = (map->init());
 		return ret;
 	}
 

@@ -201,7 +201,6 @@ void MainMenu::resize(int width, int height) {
 }
 
 void MainMenu::pause() {
-	// Clear hover state when switching away from MainMenu so the button isn't stuck highlighted
 	if (_hoveredButton) {
 		_hoveredButton->mouseLeave();
 		_hoveredButton = nullptr;
@@ -209,7 +208,6 @@ void MainMenu::pause() {
 }
 
 void MainMenu::resume() {
-	// When returning to MainMenu (e.g., pressing ESC in LocationModule), unlock mouse & show cursor
 	g_system->lockMouse(false);
 	CursorMan.showMouse(true);
 }
@@ -218,7 +216,6 @@ void MainMenu::render() {
 	if (g_engine && g_engine->_renderer) {
 		render(g_engine->_renderer);
 	}
-	// Just like WinTex CMainMenuModule::Render() line 356:
 	ModuleController::_cursors[static_cast<int>(CursorType::kArrow)].render();
 }
 
@@ -255,7 +252,6 @@ void MainMenu::mouseUp(Common::Point pt, int btn) {
 
 void MainMenu::keyDown(uint32 key, uint32 lParam) {
 	if (key == Common::KEYCODE_ESCAPE) {
-		// Same as WinTex CMainMenuModule::Back(): send MainMenu to back of stack
 		ModuleController::sendToBack(this);
 	}
 }

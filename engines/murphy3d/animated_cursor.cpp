@@ -4,6 +4,8 @@
 
 namespace Murphy3d {
 
+static AnimatedCursor *s_activeCursor = nullptr;
+
 AnimatedCursor::AnimatedCursor() {
 	_hotspotX = 0;
 	_hotspotY = 0;
@@ -98,6 +100,15 @@ void AnimatedCursor::applyToCursorMan() {
 }
 
 void AnimatedCursor::render() {
+	if (_icons.empty())
+		return;
+
+	if (s_activeCursor != this) {
+		s_activeCursor = this;
+		_lastChange = g_system->getMillis();
+		applyToCursorMan();
+	}
+
 	if (_icons.size() <= 1)
 		return; // static cursor
 

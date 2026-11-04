@@ -30,6 +30,14 @@ void ModuleBase::init() {
 	}
 }
 
+void ModuleBase::centerMouse() {
+	int cx = g_system->getWidth() / 2;
+	int cy = g_system->getHeight() / 2;
+	_cursorPosX = (float)cx;
+	_cursorPosY = (float)cy;
+	g_system->warpMouse(cx, cy);
+}
+
 void ModuleBase::gotFocus() {
 	_hasFocus = true;
 }

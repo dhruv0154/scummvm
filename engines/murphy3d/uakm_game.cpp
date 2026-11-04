@@ -1,6 +1,7 @@
 #include "murphy3d/uakm_game.h"
 #include "common/algorithm.h"
 #include "common/str.h"
+#include "common/compression/access_lzw.h"
 #include "murphy3d/archive.h"
 #include "murphy3d/game_controller.h"
 #include "murphy3d/item.h"
@@ -27,12 +28,17 @@ UAKMGame::~UAKMGame() {
 }
 
 bool UAKMGame::init() {
-	// Note: Pass nullptr for dmap until UAKMDMap is ported in Phase 3
+	readGameXMLInfo("UAKM.xml");
+	if (GameController::getFileName(48).empty()) {
+		GameController::setFileName(48, "TEXOFF.AP");
+	}
+	// Note: Pass nullptr for dmap until UAKMDMap is ported
 	UAKMMap *map = new UAKMMap();
 	if (ModuleController::init(map, nullptr) && loadIcons()) {
 		ModuleController::push(new MainMenu());
 		return true;
 	}
+
 	return false;
 }
 
@@ -85,8 +91,25 @@ void UAKMGame::newGame() {
 	_gameData[UAKM_SAVE_PARAMETERS + 250] = 1;
 	_gameData[UAKM_SAVE_HINT_CATEGORY_STATES + 1] = 1;
 
-	// Until VideoModule and DMAP are ported, load the initial 3D LocationModule directly
-	loadFromMap(0, 0);
+	MainMenu *mainMenu = static_cast<MainMenu *>(ModuleController::get(ModuleType::kMainMenu));
+	if (mainMenu != nullptr) {
+		mainMenu->enableResume(true);
+		mainMenu->enableSave(true);
+	}
+
+	// Find the MAP.LZ entry for TEXOFF.AP (locationFileIndex == 48) and push LocationModule!
+	int startEntry = 0;
+	if (ModuleController::_pMap != nullptr) {
+		for (int i = 0; i < 64; i++) {
+			MapData *md = ModuleController::_pMap->get(i);
+			if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
+				startEntry = i;
+				break;
+			}
+		}
+	}
+
+	loadFromMap(startEntry, 0);
 }
 
 void UAKMGame::loadGame(const char *fileName) {
@@ -364,7 +387,22 @@ void UAKMGame::setItemExamined(int itemId, int conditionalScore) {
 }
 
 bool UAKMGame::loadIcons() {
-	return GameBase::loadIcons();
+	Common::File iconFile;
+	if (!iconFile.open("ICONS.LZ")) {
+		warning("Murphy3d: Failed to open ICONS.LZ");
+		return false;
+	}
+
+	uint32 fileSize = iconFile.size();
+	byte *compressedData = new byte[fileSize];
+	iconFile.read(compressedData, fileSize);
+	iconFile.close();
+
+	byte *iconsData = nullptr;
+	uint32 iconsSize = Common::decompressAccessDBE(compressedData, &iconsData);
+	delete[] compressedData;
+
+	return GameBase::loadIcons(iconsData, iconsSize);
 }
 
 } // End of namespace Murphy3d

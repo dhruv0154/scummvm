@@ -53,6 +53,8 @@ public:
 protected:
 	virtual void initialize() = 0;
 
+	void centerMouse();
+
 	float _cursorPosX;
 	float _cursorPosY;
 	int _cursorMinX;
