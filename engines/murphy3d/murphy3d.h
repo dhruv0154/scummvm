@@ -22,32 +22,27 @@
 #ifndef MURPHY3D_H
 #define MURPHY3D_H
 
-#include "common/scummsys.h"
-#include "common/system.h"
 #include "common/error.h"
 #include "common/fs.h"
 #include "common/hash-str.h"
 #include "common/random.h"
+#include "common/scummsys.h"
 #include "common/serializer.h"
+#include "common/system.h"
 #include "common/util.h"
 #include "engines/engine.h"
 #include "engines/savestate.h"
 #include "graphics/screen.h"
 
-#include "murphy3d/detection.h"
-#include "murphy3d/renderer.h"
-#include "murphy3d/font.h"
-#include "murphy3d/main_menu.h"
-#include "murphy3d/location.h"
-#include "murphy3d/player.h"
 #include "murphy3d/animated_cursor.h"
+#include "murphy3d/detection.h"
+#include "murphy3d/font.h"
+#include "murphy3d/location.h"
+#include "murphy3d/main_menu.h"
+#include "murphy3d/renderer.h"
+#include "murphy3d/game_base.h"
 
 namespace Murphy3d {
-
-enum EngineState {
-	kStateMainMenu,
-	kStateInGame
-};
 
 struct Murphy3dGameDescription;
 
@@ -55,34 +50,22 @@ class Murphy3dEngine : public Engine {
 private:
 	const ADGameDescription *_gameDescription;
 	Common::RandomSource _randomSource;
-
-	EngineState _state;
-	Font *_font;
-	MainMenu *_mainMenu;
-
-	Location *_currentLocation;
-	Player *_player;
-
-	AnimatedCursor _cursors[(int)CursorType::kSpecial + 1];
-	CursorType _activeCursor;
-	bool loadCursors();
+	GameBase *_game = nullptr;
 
 protected:
 	// Engine APIs
 	Common::Error run() override;
+
 public:
 	Graphics::Screen *_screen = nullptr;
 	Murphy3d::Renderer *_renderer = nullptr;
+	Font *_font = nullptr;
 
-	void startNewGame();
 	void resumeGame();
 	void showMainMenu();
 	void quitGame() {
 		Engine::quitGame();
 	}
-
-	void setActiveCursor(CursorType type);
-	AnimatedCursor *getCursor(CursorType type);
 
 public:
 	Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc);
@@ -104,10 +87,9 @@ public:
 	}
 
 	bool hasFeature(EngineFeature f) const override {
-		return
-		    (f == kSupportsLoadingDuringRuntime) ||
-		    (f == kSupportsSavingDuringRuntime) ||
-		    (f == kSupportsReturnToLauncher);
+		return (f == kSupportsLoadingDuringRuntime) ||
+			   (f == kSupportsSavingDuringRuntime) ||
+			   (f == kSupportsReturnToLauncher);
 	};
 
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override {
