@@ -2,6 +2,8 @@
 #define MURPHY3D_UAKM_GAME_H
 
 #include "murphy3d/game_base.h"
+#include "murphy3d/uakm_script.h"
+#include "murphy3d/uakm_script_state.h"
 
 namespace Murphy3d {
 
@@ -75,8 +77,8 @@ public:
 	void keyDown(uint32 key, uint32 lParam) override;
 	void keyUp(uint32 key, uint32 lParam) override;
 
-	ScriptBase *getScriptEngine() override { return nullptr; /* TODO: new UAKMScript() */ }
-	ScriptState *getScriptState() override { return nullptr; /* TODO: new UAKMScriptState() */ }
+	ScriptBase *getScriptEngine() override { return new UAKMScript(); }
+	ScriptState *getScriptState() override { return new UAKMScriptState(); }
 
 	void loadGame(const char *fileName) override;
 	void saveGame(const char *fileName) override;
