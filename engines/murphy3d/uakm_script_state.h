@@ -15,7 +15,7 @@ public:
 
 		_scriptEntries.clear();
 		if (script != nullptr) {
-			for (int i = 0; i < length - 2; i++) {
+			for (int i = 0; i < (length - 2); i++) {
 				if (script[i] == 0xe0) {
 					int id = ((int)script[i + 1]) | (((int)script[i + 2]) << 8);
 					if (!_scriptEntries.contains(id)) {
@@ -30,4 +30,4 @@ public:
 
 } // End of namespace Murphy3d
 
-#endif
+#endif // MURPHY3D_UAKM_SCRIPT_STATE_H

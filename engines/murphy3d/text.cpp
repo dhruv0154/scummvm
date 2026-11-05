@@ -30,7 +30,7 @@ void Text::setColours(uint32 c1, uint32 c2, uint32 c3, uint32 c4) {
 	// if vertices were already generated,
 	// update their RGB values in place and refresh the VBO
 	if (!_vertices.empty() && _vbo != 0 && g_engine && g_engine->_renderer) {
-		uint32 activeCol = (_colour1 != 0) ? _colour1 : _colour2;
+		uint32 activeCol = ((_colour1 & 0x00FFFFFF) != 0) ? _colour1 : _colour2;
 		float r, g, b;
 		extractRGB(activeCol, r, g, b);
 		for (uint i = 0; i < _vertices.size(); i++) {
@@ -53,8 +53,16 @@ void Text::setText(const Common::String &text, float scale) {
 	setText(text, rect, kAlignLeft, scale);
 }
 
+void Text::setText(const Common::String &text, TextAlignment alignment, float scale) {
+	Rect rect = {10.0f, 0.0f, 630.0f, 480.0f};
+	setText(text, rect, alignment, scale);
+}
+
 void Text::setText(const Common::String &text, const Rect &rect, TextAlignment alignment, float scale) {
 	_vertices.clear();
+	_lines = 0;
+	_width = 0.0f;
+
 	if (!_font && g_engine)
 		_font = g_engine->_font;
 	if (text.empty() || !_font)
@@ -65,7 +73,8 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 	Common::Array<Word> words;
 	int start = 0;
 	float pixels = 0.0f;
-	uint32 defaultCol = (_colour1 != 0) ? _colour1 : _colour2;
+	// If _colour1 is 0 or pure black outline (0xff000000), use _colour2 as the primary text color
+	uint32 defaultCol = ((_colour1 & 0x00FFFFFF) != 0) ? _colour1 : _colour2;
 	uint32 currentCol = defaultCol;
 
 	for (uint i = 0; i <= text.size(); i++) {
@@ -79,23 +88,23 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 				w.pixels = pixels;
 				w.text = text.substr(start, len);
 				words.push_back(w);
+			}
 
-				start = i + 1;
-				pixels = 0.0f;
+			start = i + 1;
+			pixels = 0.0f;
 
-				if (c == '<')
-					currentCol = _colour2;
-				else if (c == '~')
-					currentCol = _colour3;
-				else if (c == '>' || c == '@')
-					currentCol = defaultCol;
-				else if (c == '\n') {
-					Word nl;
-					nl.text = "\n";
-					nl.pixels = 0.0f;
-					nl.color = currentCol;
-					words.push_back(nl);
-				}
+			if (c == '<')
+				currentCol = _colour2;
+			else if (c == '~')
+				currentCol = _colour3;
+			else if (c == '>' || c == '@')
+				currentCol = defaultCol;
+			else if (c == '\n') {
+				Word nl;
+				nl.text = "\n";
+				nl.pixels = 0.0f;
+				nl.color = currentCol;
+				words.push_back(nl);
 			}
 		} else if (c == '^' && i + 1 < text.size()) {
 			char cix = text[++i];
@@ -140,8 +149,11 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 			wordIndex++;
 		}
 
-		if (wordIndex < words.size() && words[wordIndex].text == "\n")
+		bool endsWithNewline = (wordIndex < words.size() && words[wordIndex].text == "\n");
+		if (endsWithNewline)
 			wordIndex++;
+		bool isLastLine = (wordIndex >= words.size());
+
 		_lines++;
 		float pixelsLeft = maxw - linePixels;
 
@@ -152,7 +164,7 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 			sx += pixelsLeft / 2.0f;
 		} else if (alignment == kAlignRight) {
 			sx += pixelsLeft;
-		} else if (alignment == kAlignJustify && wordsInLine > 1 && linePixels > 0) {
+		} else if (alignment == kAlignJustify && !isLastLine && !endsWithNewline && wordsInLine > 1 && linePixels > 0) {
 			justifyAdjust = pixelsLeft / (wordsInLine - 1);
 		}
 

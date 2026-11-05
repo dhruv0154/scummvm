@@ -8,6 +8,7 @@
 #include "murphy3d/main_menu.h"
 #include "murphy3d/module_controller.h"
 #include "murphy3d/murphy3d.h"
+#include "murphy3d/animation_controller.h"
 #include "graphics/cursorman.h"
 
 namespace Murphy3d {
@@ -114,7 +115,7 @@ void LocationModule::initialize() {
 					}
 				}
 			}
-
+			AnimationController::clear();
 			loadLocation(mapEntry->locationFileIndex, scriptData, scriptLen, scriptFile, mapEntry->scriptFileEntry);
 			setLocationPosition(ModuleController::_pMap->getStartupPosition(_locationId, _startupPosition));
 
@@ -127,7 +128,7 @@ void LocationModule::initialize() {
 }
 
 void LocationModule::render() {
-	if (_scriptEngine != nullptr && _initScriptState != nullptr && _actionScriptState != nullptr && _environmentScriptState != nullptr) {
+	if (AnimationController::noVideoAnim()) {
 		bool waitingForInput = (_initScriptState->_waitingForInput || _actionScriptState->_waitingForInput || _environmentScriptState->_waitingForInput);
 		if (_initScriptState->_waitingForInput) {
 			_scriptEngine->resume(_initScriptState, true);
@@ -139,13 +140,15 @@ void LocationModule::render() {
 				_location.render();
 			}
 		} else if (_initScriptState->_executionPointer < 0) {
-			_location.animate();
+			if (!AnimationController::hasAnim()) {
+				_location.animate();
+			}
 			_location.render();
 		}
 
 		if (!waitingForInput && !_environmentScriptState->_waitingForMediaToFinish && !_actionScriptState->_waitingForMediaToFinish && !_initScriptState->_waitingForMediaToFinish) {
 			_scriptEngine->execute(_environmentScriptState, GameController::getLocationEnvironmentScriptId());
-		} else {
+		} else if (!AnimationController::hasAnim() || AnimationController::isDone()) {
 			if (_initScriptState->_waitingForMediaToFinish) {
 				_scriptEngine->resume(_initScriptState, true);
 			} else if (_actionScriptState->_waitingForMediaToFinish) {
@@ -161,6 +164,15 @@ void LocationModule::render() {
 
 	if (ModuleController::_currentModule != this) {
 		return;
+	}
+
+	AnimationController::updateAndRender();
+	if (AnimationController::isDone()) {
+		if (_actionScriptState->_waitingForMediaToFinish) {
+			_scriptEngine->resume(_actionScriptState, true);
+		} else {
+			AnimationController::clear();
+		}
 	}
 
 	float mx = _movement_x;

@@ -32,6 +32,9 @@ public:
 	// generates the geometry for the text
 	void setText(const Common::String &text, const Rect &rect, TextAlignment alignment = kAlignLeft, float scale = 1.0f);
 
+	// alignment overload using default screen bounds
+	void setText(const Common::String &text, TextAlignment alignment, float scale = 1.0f);
+
 	// single line overload
 	void setText(const Common::String &text, float scale = 1.0f);
 
@@ -39,6 +42,7 @@ public:
 
 	int getLines() const { return _lines; }
 	float getWidth() const { return _width; }
+	float getHeight() const { return _font ? (_font->getHeight() * _lines) : 0.0f; }
 
 private:
 	Font *_font;
@@ -61,4 +65,4 @@ private:
 
 } // End of namespace Murphy3d
 
-#endif
+#endif // MURPHY3D_TEXT_H

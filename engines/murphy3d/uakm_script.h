@@ -118,6 +118,8 @@ protected:
 	void function_E0(ScriptState *pState);
 
 	void addCaption(ScriptState *pState, bool texTalk);
+	void play(ScriptState *pState, int index, int bank, int rate);
+	void playAudio(ScriptState *pState, int index);
 };
 
 } // End of namespace Murphy3d

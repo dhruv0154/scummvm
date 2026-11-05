@@ -99,7 +99,7 @@ void UAKMGame::newGame() {
 	if (ModuleController::_pMap != nullptr) {
 		for (int i = 0; i < 64; i++) {
 			MapData *md = ModuleController::_pMap->get(i);
-			if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
+			if (md && md->locationFileIndex == 63 && md->startupPositions.size() > 0) {
 				startEntry = i;
 				break;
 			}

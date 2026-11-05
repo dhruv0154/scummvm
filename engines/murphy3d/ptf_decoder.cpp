@@ -1,6 +1,10 @@
 #include "murphy3d/ptf_decoder.h"
 #include "common/debug.h"
 #include "audio/decoders/raw.h"
+#include "common/system.h"
+#include "common/endian.h"
+#include "common/memstream.h"
+#include "common/util.h"
 
 #define FLI_SS2 7
 #define PTF_PALETTE 11
@@ -9,13 +13,83 @@
 
 namespace Murphy3d {
 
-PTFDecoder::PTFDecoder() : _stream(nullptr), _videoTrack(nullptr), _audioStream(nullptr), _audioFlags(0) {
+PTFDecoder::PTFDecoder(int factor) : _factor(factor), _stream(nullptr), _videoTrack(nullptr), _audioStream(nullptr), _audioFlags(0) {
 }
 		
 PTFDecoder::~PTFDecoder() {
-	if (_audioStream) {
-		g_system->getMixer()->stopHandle(_audioHandle);
+	stopAudio();
+}
+
+bool PTFDecoder::init(uint8 *pData, int length) {
+	if (!AnimBase::init(pData, length))
+		return false;
+
+	if (length >= 20 && READ_LE_UINT32(pData + 4) == 0x4654502e) { // "PTF."
+		_width = READ_LE_UINT16(pData + 12);
+		_height = READ_LE_UINT16(pData + 14);
+		_rate = READ_LE_UINT16(pData + 18);
+		_frameTime = (_rate > 0) ? ((100 * _rate) / 6) : 100;
+
+		_framePointer = 0x40;
+		int framePtr = 0x40;
+		while (framePtr < _inputBufferLength && (_videoFramePointer == 0 || _audioFramePointer == 0)) {
+			int frameSize = (int)READ_LE_UINT32(_pInputBuffer + framePtr);
+			if (frameSize < 0)
+				frameSize = 0x300 - frameSize;
+			int frameType = READ_LE_UINT16(_pInputBuffer + framePtr + 4);
+
+			if (frameType == 0x0b1c || frameType == 0x5756)
+				frameSize += 6;
+
+			if ((frameType == 0xf1fa || frameType == 0x0b1c) && _videoFramePointer == 0) {
+				_videoFramePointer = framePtr;
+			} else if (frameType == 0x5657 && _audioFramePointer == 0) {
+				_audioFramePointer = framePtr;
+			}
+			framePtr += frameSize;
+		}
+
+		// audio only PTF
+		if (_audioFramePointer != 0 && _videoFramePointer == 0) {
+			_framePointer = _inputBufferLength;
+			return true;
+		}
+
+		// video PTF
+		_stream = new Common::MemoryReadStream(_pInputBuffer, _inputBufferLength, DisposeAfterUse::NO);
+
+		if (!loadStream(_stream)) {
+			return false;
+		}
+
+		if (_width > 0 && _height > 0) {
+			createBuffers(_width, _height, _factor);
+		}
+
+		start(); // start the FlicDecoder logic
+		return true;
 	}
+
+	return false;
+}
+
+void PTFDecoder::stopAudio() {
+	if (_audioStream && g_system && g_system->getMixer()) {
+		g_system->getMixer()->stopHandle(_audioHandle);
+		_audioStream = nullptr;
+	}
+}
+
+bool PTFDecoder::isAudioPlaying() const {
+	if (!_audioStream || !g_system || !g_system->getMixer())
+		return false;
+	return g_system->getMixer()->isSoundHandleActive(_audioHandle) &&
+		   (_audioStream->numQueuedStreams() > 0 || !_audioStream->endOfStream());
+}
+
+void PTFDecoder::skip() {
+	stopAudio();
+	AnimBase::skip();
 }
 
 bool PTFDecoder::loadStream(Common::SeekableReadStream* stream) {
@@ -118,6 +192,86 @@ void PTFDecoder::readNextPacket() {
 		_stream->seek(pos);
 		break;
 	}
+}
+
+bool PTFDecoder::decodeFrame() {
+	if (_videoFramePointer == 0) {
+		if (_audioFramePointer > 0) {
+			int inPtr = _audioFramePointer;
+
+			while (inPtr < _inputBufferLength) {
+				int chunkSize = (int)READ_LE_UINT32(_pInputBuffer + inPtr);
+				inPtr += 6;
+				int audioBytes = chunkSize;
+				int audioPtr = inPtr;
+
+				if (inPtr + 4 <= _inputBufferLength && READ_LE_UINT32(_pInputBuffer + inPtr) == 0x46464952) { // RIFF
+					_remainingAudioLength = READ_LE_UINT32(_pInputBuffer + inPtr + 0x28);
+
+					if (_sourceVoice == nullptr) {
+						AudioFormat format;
+						format.channels = READ_LE_UINT16(_pInputBuffer + inPtr + 0x16);
+						format.samplesPerSec = READ_LE_UINT32(_pInputBuffer + inPtr + 0x18);
+						format.bitsPerSample = READ_LE_UINT16(_pInputBuffer + inPtr + 0x22);
+
+						_sourceVoice = Sound::createAudioStream(format);
+					}
+
+					audioPtr += 0x2c;
+					audioBytes -= 0x2c;
+				}
+
+				int sizeToSubmit = MIN(audioBytes, _remainingAudioLength);
+				sizeToSubmit = MIN(sizeToSubmit, _inputBufferLength - audioPtr);
+
+				if (_sourceVoice != nullptr && sizeToSubmit > 0) {
+					_sourceVoice->submitBuffer(_pInputBuffer + audioPtr, sizeToSubmit);
+					_remainingAudioLength -= sizeToSubmit;
+					_audioFramesQueued++;
+				}
+
+				inPtr += chunkSize;
+			}
+
+			if (_sourceVoice != nullptr) {
+				_sourceVoice->finish();
+				_sourceVoice->start();
+			}
+			_audioFramePointer = 0;
+		}
+		return true;
+	}
+
+	readNextPacket();
+	if (_videoTrack != nullptr) {
+		if (!endOfVideo()) {
+			const Graphics::Surface *surf = Video::FlicDecoder::decodeNextFrame();
+			if (hasDirtyPalette()) {
+				const byte *pal = getPalette();
+				byte *dstPal = (byte *)_pPalette;
+				for (int i = 0; i < 256; i++) {
+					dstPal[i * 4 + 0] = pal[i * 3 + 0];
+					dstPal[i * 4 + 1] = pal[i * 3 + 1];
+					dstPal[i * 4 + 2] = pal[i * 3 + 2];
+					dstPal[i * 4 + 3] = 255;
+				}
+			}
+
+			if (surf && surf->getPixels() && _pVideoOutputBuffer) {
+				memcpy(_pVideoOutputBuffer, surf->getPixels(), _width * _height);
+			}
+		}
+
+		if (endOfVideo() && isStreamAtEnd()) {
+			_framePointer = _inputBufferLength;
+			if (!isAudioPlaying()) {
+				_done = true;
+			}
+		}
+		return true;
+	}
+
+	return false;
 }
 
 PTFDecoder::PTFVideoTrack::PTFVideoTrack(Common::SeekableReadStream *stream, uint16 frameCount, uint16 width, uint16 height, uint16 rate)
