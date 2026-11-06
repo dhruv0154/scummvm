@@ -20,7 +20,7 @@ GameBase::GameBase() {
 }
 
 GameBase::~GameBase() {
-	for (int i = 0; i < 12; i++) {
+	for (int i = 0; i < 13; i++) {
 		ModuleController::_cursors[i].dispose();
 	}
 	for (auto &it : _hintCategories) {
@@ -91,6 +91,7 @@ bool GameBase::loadIcons(const byte *bdData, uint32 bdLength) {
 
 				Graphics::Surface *surf = new Graphics::Surface();
 				surf->create(w, h, Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16, 8, 0));
+				memset(surf->getPixels(), 0, w * h * 4);
 
 				const uint8 *pSrc = pIcon + 16;
 				for (int y = 0; y < h; y++) {
@@ -115,6 +116,11 @@ bool GameBase::loadIcons(const byte *bdData, uint32 bdLength) {
 			}
 
 			ModuleController::_cursors[i].setIcons(static_cast<CursorType>(i), icons);
+
+			for (uint k = 0; k < icons.size(); k++) {
+				icons[k]->free();
+				delete icons[k];
+			}
 		}
 	}
 

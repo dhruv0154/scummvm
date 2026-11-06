@@ -4,12 +4,17 @@
 
 namespace Murphy3d {
 
-ShaderManager::ShaderManager() : _texturedShader(nullptr), _uiFontShader(nullptr) {
+ShaderManager::ShaderManager()
+	: _texturedShader(nullptr), _uiFontShader(nullptr), _colouredShader(nullptr) {
 }
 
 ShaderManager::~ShaderManager() {
 	delete _texturedShader;
+	_texturedShader = nullptr;
 	delete _uiFontShader;
+	_uiFontShader = nullptr;
+	delete _colouredShader;
+	_colouredShader = nullptr;
 }
 
 bool ShaderManager::init() {
@@ -21,7 +26,7 @@ bool ShaderManager::init() {
 		nullptr};
 
 	bool success = _texturedShader->loadFromStrings("texturedShader", getVertexShaderTextured(),
-					getPixelShaderTextured(), attributes, 120);
+									getPixelShaderTextured(), attributes, 120);
 
 	if (!success) {
 		warning("ShaderManager: Failed to compile Textured shader. %s", _texturedShader->getError().c_str());
@@ -40,7 +45,7 @@ bool ShaderManager::init() {
 		nullptr};
 
 	success = _uiFontShader->loadFromStrings("uiFontShader", getVertexShaderUIFont(),
-				getPixelShaderUIFont(), uiAttributes, 120);
+							getPixelShaderUIFont(), uiAttributes, 120);
 
 	if (!success) {
 		warning("ShaderManager: Failed to compile UI Font shader. %s", _uiFontShader->getError().c_str());
@@ -49,6 +54,21 @@ bool ShaderManager::init() {
 
 	_uiFontShader->use();
 	_uiFontShader->setUniform("texture1", 0);
+
+	_colouredShader = new OpenGL::Shader();
+
+	const char *const colAttributes[] = {
+		"position",
+		"color",
+		nullptr};
+
+	success = _colouredShader->loadFromStrings("colouredShader", getVertexShaderColoured(),
+								getPixelShaderColoured(), colAttributes, 120);
+
+	if (!success) {
+		warning("ShaderManager: Failed to compile Coloured shader. %s", _colouredShader->getError().c_str());
+		return false;
+	}
 
 	return true;
 }
@@ -59,12 +79,18 @@ void ShaderManager::useTexturedShader() {
 }
 
 void ShaderManager::setMatrices(const Math::Matrix4 &world, const Math::Matrix4 &view, const Math::Matrix4 &proj) {
-	if (!_texturedShader)
-		return;
-	_texturedShader->use();
-	_texturedShader->setUniform("World", world);
-	_texturedShader->setUniform("View", view);
-	_texturedShader->setUniform("Projection", proj);
+	if (_texturedShader) {
+		_texturedShader->use();
+		_texturedShader->setUniform("World", world);
+		_texturedShader->setUniform("View", view);
+		_texturedShader->setUniform("Projection", proj);
+	}
+	if (_colouredShader) {
+		_colouredShader->use();
+		_colouredShader->setUniform("World", world);
+		_colouredShader->setUniform("View", view);
+		_colouredShader->setUniform("Projection", proj);
+	}
 }
 
 const char *ShaderManager::getVertexShaderTextured() {
@@ -86,6 +112,7 @@ const char *ShaderManager::getPixelShaderTextured() {
 		   "uniform sampler2D texture1;\n"
 		   "void main() {\n"
 		   "    vec4 texColor = texture(texture1, TexCoord);\n"
+		   "    if (texColor.a < 0.25) discard;\n"
 		   "    outColor = texColor;\n"
 		   "}\n";
 }
@@ -118,6 +145,27 @@ const char *ShaderManager::getPixelShaderUIFont() {
 		   "    vec4 botBase = l2.a * VertColor;\n"
 		   "    outColor = topBase + botBase;\n"
 		   "    if (outColor.a < 0.1) discard;\n"
+		   "}\n";
+}
+
+const char *ShaderManager::getVertexShaderColoured() {
+	return "in vec3 position;\n"
+		   "in vec4 color;\n"
+		   "out vec4 VertColor;\n"
+		   "uniform mat4 World;\n"
+		   "uniform mat4 View;\n"
+		   "uniform mat4 Projection;\n"
+		   "void main() {\n"
+		   "    gl_Position = Projection * View * World * vec4(position, 1.0);\n"
+		   "    VertColor = color;\n"
+		   "}\n";
+}
+
+const char *ShaderManager::getPixelShaderColoured() {
+	return "in vec4 VertColor;\n"
+		   "OUTPUT\n"
+		   "void main() {\n"
+		   "    outColor = VertColor;\n"
 		   "}\n";
 }
 

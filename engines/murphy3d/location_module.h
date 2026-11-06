@@ -42,7 +42,9 @@ public:
 	void keyDown(uint32 key, uint32 lParam) override;
 	void keyUp(uint32 key, uint32 lParam) override;
 	void mouseMove(Common::Point pt) override;
+	void mouseMoveRel(Common::Point rel) override;
 	void mouseDown(Common::Point pt, int btn) override;
+	void mouseWheel(int scroll) override;
 
 protected:
 	void initialize() override;
@@ -69,6 +71,8 @@ protected:
 	ActionType _currentActions = ActionType::kNone;
 	int _currentActionMousePointerIndex = 0;
 	Text _actionText[7];
+
+	bool _ignoreNextMouseMove = false;
 
 	virtual void selectMouseAction();
 	void cycleActions(bool allowUse);

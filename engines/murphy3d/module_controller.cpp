@@ -54,6 +54,29 @@ void ModuleController::pop(ModuleBase *pModule) {
 	}
 }
 
+void ModuleController::destroy() {
+	for (ModuleBase *it : _modules) {
+		delete it;
+	}
+	_modules.clear();
+	_currentModule = nullptr;
+	_nextModule = nullptr;
+
+	for (int i = 0; i < 13; ++i) {
+		_cursors[i].dispose();
+	}
+
+	if (_pMap != nullptr) {
+		delete _pMap;
+		_pMap = nullptr;
+	}
+
+	if (_pDMap != nullptr) {
+		delete _pDMap;
+		_pDMap = nullptr;
+	}
+}
+
 void ModuleController::sendToBack(ModuleBase *pModule) {
 	if (pModule != nullptr) {
 		_modules.remove(pModule);
@@ -104,7 +127,6 @@ void ModuleController::render() {
 		g_engine->_renderer->clear(0, 0, 0);
 		_currentModule->render();
 		_currentModule->checkInput();
-		g_system->updateScreen();
 	}
 }
 
@@ -117,6 +139,12 @@ void ModuleController::mouseMove(Common::Point pt) {
 void ModuleController::mouseDown(Common::Point pt, int btn) {
 	if (_currentModule != nullptr) {
 		_currentModule->mouseDown(pt, btn);
+	}
+}
+
+void ModuleController::mouseMoveRel(Common::Point rel) {
+	if (_currentModule != nullptr) {
+		_currentModule->mouseMoveRel(rel);
 	}
 }
 

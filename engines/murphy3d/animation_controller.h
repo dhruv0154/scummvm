@@ -10,6 +10,7 @@ class AnimationController {
 public:
 	static void init();
 	static void clear();
+	static void destroy();
 
 	static bool load(const Common::String &fileName, int itemIndex);
 	static bool skip();

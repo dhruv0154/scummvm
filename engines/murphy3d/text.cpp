@@ -203,11 +203,8 @@ void Text::setText(const Common::String &text, const Rect &rect, TextAlignment a
 	}
 
 	if (_vertices.size() > 0 && g_engine && g_engine->_renderer) {
-		if (_vbo == 0) {
-			_vbo = g_engine->_renderer->createVertexBuffer(_vertices.data(), _vertices.size() * sizeof(MULTICOLOURED_FONT_VERTEX), true);
-		} else {
-			g_engine->_renderer->updateBufferData(_vbo, _vertices.data(), _vertices.size() * sizeof(MULTICOLOURED_FONT_VERTEX), 0);
-		}
+		g_engine->_renderer->deleteBuffer(_vbo);
+		_vbo = g_engine->_renderer->createVertexBuffer(_vertices.data(), _vertices.size() * sizeof(MULTICOLOURED_FONT_VERTEX), true);
 	}
 }
 

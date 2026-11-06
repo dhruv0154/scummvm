@@ -11,6 +11,7 @@ namespace Murphy3d {
 class GameController {
 public:
 	static void init();
+	static void destroy();
 	static bool startGame(GameBase *pGame);
 
 	static int getScore() { return _game ? _game->getScore() : 0; }

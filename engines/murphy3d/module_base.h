@@ -25,6 +25,7 @@ public:
 	virtual void render();
 
 	virtual void mouseMove(Common::Point pt);
+	virtual void mouseMoveRel(Common::Point rel);
 	virtual void mouseDown(Common::Point pt, int btn);
 	virtual void mouseUp(Common::Point pt, int btn);
 	virtual void mouseWheel(int scroll);

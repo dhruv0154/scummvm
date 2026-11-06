@@ -57,7 +57,6 @@ protected:
 	Common::Error run() override;
 
 public:
-	Graphics::Screen *_screen = nullptr;
 	Murphy3d::Renderer *_renderer = nullptr;
 	Font *_font = nullptr;
 

@@ -60,7 +60,7 @@ namespace Murphy3d {
 
 #define UAKM_SAVE_SIZE 0x8ec
 #define UAKM_MAX_ITEM_COUNT 142
-#define TIMER_SCALE 1000
+#define TIMER_SCALE 16.66666f
 
 class UAKMGame : public GameBase {
 protected:
@@ -95,7 +95,7 @@ public:
 	void setData(int offset, const char *text) override;
 	int getWord(int offset, bool signExtend = false) override;
 	void setWord(int offset, int value) override;
-	void copy(uint8 *source, int destinationOffset, int length) override {}
+	void copy(uint8 *source, int destinationOffset, int length) override;
 
 	uint8 getAskAboutState(int index) override;
 	void setAskAboutState(int index, uint8 state) override;

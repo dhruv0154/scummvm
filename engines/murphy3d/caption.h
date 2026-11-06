@@ -33,6 +33,7 @@ public:
 	static void addCaption(int frame, const char *text, bool tex);
 	static void clearCaptions(Common::List<Caption *> *pCap);
 	static void swapCaptions();
+	static void destroy();
 
 protected:
 	int _frame;

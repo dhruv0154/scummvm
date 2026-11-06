@@ -22,9 +22,8 @@ struct MULTICOLOURED_FONT_VERTEX {
 };
 
 struct COLOURED_VERTEX {
-	float x, y, z, w;
+	float x, y, z;
 	float r, g, b, a;
-	float oX, oY, oZ, oW;
 };
 
 struct COLOURED_VERTEX_ORTHO {

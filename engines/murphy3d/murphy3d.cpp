@@ -46,6 +46,9 @@
 #include "murphy3d/game_controller.h"
 #include "murphy3d/module_controller.h"
 #include "murphy3d/uakm_game.h"
+#include "murphy3d/animation_controller.h"
+#include "murphy3d/ambient_audio.h"
+#include "murphy3d/caption.h"
 
 namespace Murphy3d {
 
@@ -53,14 +56,22 @@ Murphy3dEngine *g_engine;
 
 Murphy3dEngine::Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	: Engine(syst), _gameDescription(gameDesc), _randomSource("Murphy3d"),
-	  _game(nullptr), _screen(nullptr), _renderer(nullptr), _font(nullptr) {
+	  _game(nullptr), _renderer(nullptr), _font(nullptr) {
 	g_engine = this;
 }
 
 Murphy3dEngine::~Murphy3dEngine() {
+	AnimationController::destroy();
+	AmbientAudio::destroy();
+	Caption::destroy();
+	ModuleController::destroy();
+	Item::dispose();
+	Button::disposeTextures();
+
 	delete _game;
+	GameController::destroy();
+
 	delete _font;
-	delete _screen;
 	delete _renderer;
 }
 
@@ -99,7 +110,6 @@ Common::Error Murphy3dEngine::run() {
 		return Common::Error(Common::kUnknownError, _s("This game requires OpenGL with shaders, which is not supported on your system"));
 
 	initGraphics3d(640, 480);
-	_screen = new Graphics::Screen();
 
 	debug(0, "Murphy 3d engine starting..");
 

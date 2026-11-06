@@ -52,9 +52,9 @@ uint32 Map::readStartupPositions(MapData *pMapdata, const byte *data, uint32 off
 		float fa = (float)a / 10.0f;
 
 		StartupPosition pos;
-		pos.x = x;
-		pos.y = y;
-		pos.z = z;
+		pos.x = -x;
+		pos.y = -y;
+		pos.z = -z;
 		pos.initialEyeLevel = -dy * 6.0f;
 		pos.minYAdj = -dy * 8.0f;
 		pos.maxYAdj = -dy * 1.5f;

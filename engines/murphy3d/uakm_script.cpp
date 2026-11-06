@@ -7,10 +7,11 @@
 #include "murphy3d/caption.h"
 #include "murphy3d/animation_controller.h"
 #include "murphy3d/ambient_audio.h"
+#include "murphy3d/main_menu.h"
 
 namespace Murphy3d {
 
-UAKMScript::UAKMScript() {
+UAKMScript::UAKMScript() : _videoMode(VideoMode::kFullScreen), _lastKnownEyeBotPosition(0.0f, 0.0f, 0.0f) {
 	_functions[0x00] = &UAKMScript::function_80;
 	_functions[0x01] = &UAKMScript::function_81;
 	_functions[0x02] = &UAKMScript::function_82;
@@ -325,15 +326,28 @@ void UAKMScript::function_8A(ScriptState *pState) {
 // 0x8B: Start mapped location Animation
 void UAKMScript::function_8B(ScriptState *pState) {
 	int anim = pState->read8();
-	(void)anim;
-	// _pLoc->startMappedAnimation(anim);
+	if (_pLoc != nullptr) {
+		_pLoc->startMappedAnimation(anim);
+	}
 }
 
 // 0x8C: Set Parameter[index] = value
 void UAKMScript::function_8C(ScriptState *pState) {
 	int index = pState->read8();
-	uint8 value = (uint8)pState->read8();
-	GameController::setParameter(index, value);
+	int value = pState->read8();
+	if (index == 252) {
+		if (value == 1 && GameController::getParameter(index) == 0) {
+			pState->_offer = false;
+			pState->_askAbout = false;
+			pState->_topItemOffset = -1;
+		}
+	} else if (index == 100) {
+		pState->_mode = (value != 0) ? InteractionMode::kOffer : InteractionMode::kAskAbout;
+		pState->_askAbout = false;
+		pState->_offer = false;
+		pState->_topItemOffset = -1;
+	}
+	GameController::setParameter(index, (uint8)value);
 }
 
 // 0x8D: Conditional jump if Parameter[ix] == cmp
@@ -387,8 +401,10 @@ void UAKMScript::function_92(ScriptState *pState) {
 
 // 0x93: Load 3D Location (Map entry)
 void UAKMScript::function_93(ScriptState *pState) {
-	int locationId = pState->read8();
+	AmbientAudio::clear();
 	GameController::setParameter(252, 0);
+
+	int locationId = pState->read8();
 	GameController::setWord(UAKM_SAVE_MAP_ENTRY, locationId);
 	GameController::setData(UAKM_SAVE_DMAP_FLAG, (uint8)0);
 	GameController::loadFromMap(locationId, GameController::getParameter(249));
@@ -397,12 +413,17 @@ void UAKMScript::function_93(ScriptState *pState) {
 
 // 0x94: Load DMAP cutscene/dialogue entry
 void UAKMScript::function_94(ScriptState *pState) {
-	int dmapEntry = pState->read16();
+	AmbientAudio::clear();
 	GameController::setParameter(252, 0);
+
+	int dmapEntry = pState->read16();
 	GameController::setWord(UAKM_SAVE_DMAP_ENTRY, dmapEntry);
 	GameController::setData(UAKM_SAVE_DMAP_FLAG, 1);
+	GameController::setData(UAKM_SAVE_SCRIPT_ID, (uint8)0);
+	debug(0, "UAKMScript::function_94: loadFromDMap(%d) stubbed (VideoModule not yet ported)", dmapEntry);
 	GameController::loadFromDMap(dmapEntry);
-	pState->_waitingForInput = true;
+	// not setting _waitingForInput while VideoModule is a stub so LocationModule does not lock
+	pState->_executionPointer = -1;
 }
 
 // 0x95: conditional jump if animation frame == frame
@@ -411,17 +432,18 @@ void UAKMScript::function_95(ScriptState *pState) {
 	pState->read8(); // padding byte
 	int frame = pState->read8();
 	int ns = pState->read16();
-	(void)anim;
-	(void)frame;
-	(void)ns;
+	if (_pLoc != nullptr && _pLoc->getAnimationFrame(anim) == frame) {
+		pState->_executionPointer = pState->getScript(ns);
+	}
 }
 
 // 0x96: Conditional jump if animation is finished
 void UAKMScript::function_96(ScriptState *pState) {
 	int anim = pState->read8();
 	int ns = pState->read16();
-	(void)anim;
-	pState->_executionPointer = pState->getScript(ns);
+	if (_pLoc != nullptr && _pLoc->isAnimationFinished(anim)) {
+		pState->_executionPointer = pState->getScript(ns);
+	}
 }
 
 // 0x97: Play audio clip
@@ -434,7 +456,7 @@ void UAKMScript::function_97(ScriptState *pState) {
 void UAKMScript::function_98(ScriptState *pState) {
 	float ylimit = pState->read12_4();
 	int ns = pState->read16();
-	if (_pLoc != nullptr && _pLoc->getPlayerPosition().y() > ylimit) {
+	if (_pLoc != nullptr && -_pLoc->getPlayerPosition().y() > ylimit) {
 		pState->_executionPointer = pState->getScript(ns);
 	}
 }
@@ -473,6 +495,8 @@ void UAKMScript::function_9C(ScriptState *pState) {
 	GameController::setParameter(253, 1);
 	GameController::setParameter(100, 1);
 	pState->_mode = InteractionMode::kOffer;
+	pState->_offer = false;
+	pState->_askAbout = false;
 }
 
 // 0x9D: Set AskAboutState(aa, state)
@@ -517,7 +541,13 @@ void UAKMScript::function_A1(ScriptState *pState) {
 void UAKMScript::function_A2(ScriptState *pState) { pState->_executionPointer = -1; }
 void UAKMScript::function_A3(ScriptState *pState) { pState->_executionPointer = -1; }
 void UAKMScript::function_A4(ScriptState *pState) { pState->_executionPointer = -1; }
-void UAKMScript::function_A5(ScriptState *pState) {}
+
+// 0xA5: Set Embedded Video Mode
+void UAKMScript::function_A5(ScriptState *pState) {
+	(void)pState;
+	_videoMode = VideoMode::kEmbedded;
+}
+
 void UAKMScript::function_A6(ScriptState *pState) { pState->_executionPointer = -1; }
 
 // 0xA7: Play scripted PTF video (8 bytes)
@@ -539,11 +569,17 @@ void UAKMScript::function_A8(ScriptState *pState) {
 }
 
 void UAKMScript::function_A9(ScriptState *pState) { pState->_executionPointer = -1; }
-void UAKMScript::function_AA(ScriptState *pState) {}
+
+// 0xAA: Set FullScreen Video Mode
+void UAKMScript::function_AA(ScriptState *pState) {
+	(void)pState;
+	_videoMode = VideoMode::kFullScreen;
+}
 
 // 0xAB: Show Picture (1 byte)
 void UAKMScript::function_AB(ScriptState *pState) {
-	pState->read8();
+	int ix = pState->read8();
+	debug(0, "UAKMScript::function_AB: Show Picture %d stubbed (PictureModule not yet ported)", ix);
 }
 
 // 0xAC: disable travel cancel
@@ -553,7 +589,9 @@ void UAKMScript::function_AC(ScriptState *pState) {
 
 // 0xAD: Open Travel Module
 void UAKMScript::function_AD(ScriptState *pState) {
-	pState->_waitingForInput = true;
+	debug(0, "UAKMScript::function_AD: Travel Module stubbed (UAKMTravelModule not yet ported)");
+	// do not set _waitingForInput while TravelModule is not ported, to prevent locking LocationModule
+	pState->_executionPointer = -1;
 }
 
 // 0xAE: Conditional jump if AskAboutState(ix) == val
@@ -568,14 +606,81 @@ void UAKMScript::function_AE(ScriptState *pState) {
 
 // 0xAF: Trigger puzzle module (6 bytes)
 void UAKMScript::function_AF(ScriptState *pState) {
-	pState->_executionPointer += 6;
+	int i1 = pState->read8();
+	(void)pState->read8(); // padding byte at +1
+	int i2 = pState->read16();
+	int i3 = pState->read16();
+
+	switch (i1) {
+	case 10:
+	case 24:
+		AmbientAudio::loop(_mapEntry, i2, i3);
+		break;
+	case 13:
+		if (i2 == 1) {
+			for (int i = 0; i < 40; i++) {
+				GameController::setData(UAKM_SAVE_TRAVEL + i, GameController::getData(UAKM_SAVE_TRAVEL_BACKUP + i));
+			}
+		} else {
+			for (int i = 0; i < 40; i++) {
+				GameController::setData(UAKM_SAVE_TRAVEL_BACKUP + i, GameController::getData(UAKM_SAVE_TRAVEL + i));
+				GameController::setData(UAKM_SAVE_TRAVEL + i, (uint8)0);
+			}
+			GameController::setData(UAKM_SAVE_TRAVEL + 5, 1);
+		}
+		break;
+	case 14:
+		GameController::setParameter(i2, GameController::getParameter(i2) + 1);
+		break;
+	case 23:
+		if (_pLoc != nullptr) {
+			GameController::setParameter(205, 0);
+			Math::Vector3d player = _pLoc->getPlayerPosition();
+			double distance = -1.0;
+			for (int i = 0x10; i <= 0x16; i++) {
+				SpritePosInfo info = _pLoc->getSpriteInfo(i);
+				if (info.visible) {
+					_lastKnownEyeBotPosition = info.position;
+					double dx = player.x() - info.position.x();
+					double dz = player.z() - info.position.z();
+					distance = sqrt(dx * dx + dz * dz);
+					if (distance < 35.0) {
+						GameController::setParameter(205, 1);
+					}
+					break;
+				}
+			}
+			if (distance < 0.0) {
+				double dx = player.x() - _lastKnownEyeBotPosition.x();
+				double dz = player.z() - _lastKnownEyeBotPosition.z();
+				distance = sqrt(dx * dx + dz * dz);
+			}
+			float vol = (100.0f - CLIP((float)(distance - 35.0), 0.0f, 100.0f)) / 100.0f;
+			AmbientAudio::setVolume(0, vol);
+		}
+		break;
+	default:
+		debug(0, "UAKMScript::function_AF: Special function %d (i2=%d, i3=%d) stubbed", i1, i2, i3);
+		break;
+	}
 }
 
 void UAKMScript::function_B0(ScriptState *pState) { pState->_executionPointer = -1; }
 void UAKMScript::function_B1(ScriptState *pState) { pState->_executionPointer = -1; }
 void UAKMScript::function_B2(ScriptState *pState) { pState->_executionPointer = -1; }
 void UAKMScript::function_B3(ScriptState *pState) { pState->_executionPointer = -1; }
-void UAKMScript::function_B4(ScriptState *pState) { pState->_waitingForInput = true; }
+
+// 0xB4: Display 3 dialogue option strings
+void UAKMScript::function_B4(ScriptState *pState) {
+	pState->_lastDialoguePoint = pState->_executionPointer - 1;
+	for (int i = 0; i < 3; i++) {
+		while (pState->_executionPointer < pState->_length && pState->_script[pState->_executionPointer++] != 0) {
+		}
+	}
+	pState->_selectedOption = -1;
+	pState->_waitingForInput = true;
+}
+
 void UAKMScript::function_B5(ScriptState *pState) { pState->_executionPointer = -1; }
 
 // 0xB6: Allow Action (1=Look, 2=Move, 3=Open, 4=Get, 5=Talk, 6=OnOff)
@@ -647,7 +752,10 @@ void UAKMScript::function_BF(ScriptState *pState) {
 
 // 0xC0: Stop mapped animation (1 byte)
 void UAKMScript::function_C0(ScriptState *pState) {
-	pState->read8();
+	int anim = pState->read8();
+	if (_pLoc != nullptr) {
+		_pLoc->stopMappedAnimation(anim);
+	}
 }
 
 void UAKMScript::function_C1(ScriptState *pState) { pState->_executionPointer = -1; }
@@ -670,8 +778,18 @@ void UAKMScript::function_C5(ScriptState *pState) {
 	}
 }
 
-void UAKMScript::function_C6(ScriptState *pState) { pState->_executionPointer = -1; }
-void UAKMScript::function_C7(ScriptState *pState) {}
+// 0xC6: Game Over
+void UAKMScript::function_C6(ScriptState *pState) {
+	pState->_executionPointer = -1;
+	MainMenu *pMMM = static_cast<MainMenu *>(ModuleController::get(ModuleType::kMainMenu));
+	if (pMMM != nullptr) {
+		pMMM->enableResume(false);
+		pMMM->enableSave(false);
+		ModuleController::clearExcept(pMMM);
+	}
+}
+
+void UAKMScript::function_C7(ScriptState *pState) { (void)pState; }
 void UAKMScript::function_C8(ScriptState *pState) { pState->_executionPointer = -1; }
 
 // 0xC9: Add Score (2 bytes)
@@ -750,9 +868,23 @@ void UAKMScript::function_DA(ScriptState *pState) {
 	}
 }
 
-// 0xDB & 0xDC: Play video (8 bytes)
-void UAKMScript::function_DB(ScriptState *pState) { pState->_executionPointer += 8; }
-void UAKMScript::function_DC(ScriptState *pState) { pState->_executionPointer += 8; }
+// 0xDB: Play BIC video (8 bytes)
+void UAKMScript::function_DB(ScriptState *pState) {
+	(void)pState->read16(); // offX
+	(void)pState->read16(); // offY
+	int index = pState->read16();
+	int rate = pState->read16();
+	play(pState, index, 1, rate);
+}
+
+// 0xDC: Play SilentBIC video (8 bytes)
+void UAKMScript::function_DC(ScriptState *pState) {
+	(void)pState->read16(); // offX
+	(void)pState->read16(); // offY
+	int index = pState->read16();
+	int rate = pState->read16();
+	play(pState, index, 1, rate);
+}
 
 void UAKMScript::function_DD(ScriptState *pState) { pState->_executionPointer = -1; }
 void UAKMScript::function_DE(ScriptState *pState) { pState->_executionPointer = -1; }

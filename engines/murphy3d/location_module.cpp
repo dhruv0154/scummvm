@@ -4,7 +4,9 @@
 #include "common/system.h"
 #include "murphy3d/animated_cursor.h"
 #include "murphy3d/archive.h"
+#include "murphy3d/caption.h"
 #include "murphy3d/game_controller.h"
+#include "murphy3d/item.h"
 #include "murphy3d/main_menu.h"
 #include "murphy3d/module_controller.h"
 #include "murphy3d/murphy3d.h"
@@ -46,6 +48,7 @@ LocationModule::LocationModule(int locationId, int startupPosition)
 	_smooth_movement_x = 0.0f;
 	_smooth_movement_z = 0.0f;
 	_speed = MOVEMENT_WALK_SPEED;
+	_ignoreNextMouseMove = true;
 
 	_oldPoint = Common::Point(g_system->getWidth() / 2, g_system->getHeight() / 2);
 
@@ -70,6 +73,9 @@ LocationModule::LocationModule(int locationId, int startupPosition)
 }
 
 LocationModule::~LocationModule() {
+	if (g_system) {
+		g_system->lockMouse(false);
+	}
 	if (_actionScriptState != nullptr && _actionScriptState->_script != nullptr) {
 		delete[] _actionScriptState->_script;
 		_actionScriptState->_script = nullptr;
@@ -80,6 +86,9 @@ LocationModule::~LocationModule() {
 	if (_queryActionScriptState != nullptr) {
 		_queryActionScriptState->_script = nullptr;
 	}
+	if (_initScriptState != nullptr) {
+		_initScriptState->_script = nullptr;
+	}
 	delete _actionScriptState;
 	delete _environmentScriptState;
 	delete _queryActionScriptState;
@@ -88,6 +97,10 @@ LocationModule::~LocationModule() {
 }
 
 void LocationModule::initialize() {
+	centerMouse();
+	g_system->lockMouse(true);
+	CursorMan.showMouse(true);
+	_ignoreNextMouseMove = true;
 
 	GameController::resetTimers();
 
@@ -157,9 +170,6 @@ void LocationModule::render() {
 				_scriptEngine->resume(_environmentScriptState, true);
 			}
 		}
-	} else {
-		_location.animate();
-		_location.render();
 	}
 
 	if (ModuleController::_currentModule != this) {
@@ -175,97 +185,110 @@ void LocationModule::render() {
 		}
 	}
 
-	float mx = _movement_x;
-	float mz = _movement_z;
-	float tmz = mz;
+	if (!AnimationController::hasAnim()) {
+		CursorMan.showMouse(true);
 
-	if (mx != 0.0f || mz != 0.0f) {
-		mx = _speed * mx;
-		mz = _speed * mz;
+		float mx = _movement_x;
+		float mz = _movement_z;
+		float tmz = mz;
 
-		float totalmovement = sqrt(mx * mx + mz * mz);
-		if (totalmovement > _speed) {
-			mx /= (totalmovement / _speed);
-			mz /= (totalmovement / _speed);
-		}
-	}
+		if (mx != 0.0f || mz != 0.0f) {
+			mx = _speed * mx;
+			mz = _speed * mz;
 
-	_smooth_movement_x = _smooth_movement_x * 0.85f + mx * 0.15f;
-	_smooth_movement_z = _smooth_movement_z * 0.85f + mz * 0.15f;
-
-	if (fabs(_smooth_movement_x) < 0.01f && _movement_x == 0.0f) {
-		_smooth_movement_x = 0.0f;
-	}
-	if (fabs(_smooth_movement_z) < 0.01f && _movement_z == 0.0f) {
-		_smooth_movement_z = 0.0f;
-	}
-
-	int currentItemId = GameController::getCurrentItemId();
-	if (_currentAction == ActionType::kUse && currentItemId == -1) {
-		_currentAction = ActionType::kNone;
-	}
-
-	_location.move(_smooth_movement_x, _movement_y, _smooth_movement_z, tmz);
-
-	if (_location._pointingChanged) {
-		int objectId = -1, subObjectId = -1;
-		int hitObject = _location.getPickObject(objectId, subObjectId);
-		if (hitObject == -1) {
-			_currentObjectIndex = -1;
-			_currentActions = ActionType::kNone;
-			if (_currentAction != ActionType::kUse) {
-				_currentAction = ActionType::kNone;
+			float totalmovement = sqrt(mx * mx + mz * mz);
+			if (totalmovement > _speed) {
+				mx /= (totalmovement / _speed);
+				mz /= (totalmovement / _speed);
 			}
-			_currentActionMousePointerIndex = static_cast<int>(CursorType::kCrosshair);
-		} else if (_scriptEngine != nullptr && _queryActionScriptState != nullptr) {
-			bool resetAction = (hitObject != _currentObjectIndex);
-			_currentObjectIndex = hitObject;
-			_currentActions = _scriptEngine->getCurrentActions(_queryActionScriptState, _currentObjectIndex);
+		}
 
-			if (_currentAction != ActionType::kUse && resetAction) {
-				if (_currentActions != ActionType::kNone) {
-					_currentAction = ActionType::kLook;
-					while (((int)_currentActions & (int)_currentAction) == 0) {
-						_currentAction = static_cast<ActionType>((int)_currentAction << 1);
-					}
-					selectMouseAction();
-				} else {
+		_smooth_movement_x = _smooth_movement_x * 0.85f + mx * 0.15f;
+		_smooth_movement_z = _smooth_movement_z * 0.85f + mz * 0.15f;
+
+		if (fabs(_smooth_movement_x) < 0.01f && _movement_x == 0.0f) {
+			_smooth_movement_x = 0.0f;
+		}
+		if (fabs(_smooth_movement_z) < 0.01f && _movement_z == 0.0f) {
+			_smooth_movement_z = 0.0f;
+		}
+
+		int currentItemId = GameController::getCurrentItemId();
+		if (_currentAction == ActionType::kUse && currentItemId == -1) {
+			_currentAction = ActionType::kNone;
+		}
+
+		_location.move(_smooth_movement_x, _movement_y, _smooth_movement_z, tmz);
+
+		if (_location._pointingChanged) {
+			int objectId = -1, subObjectId = -1;
+			int hitObject = _location.getPickObject(objectId, subObjectId);
+			if (hitObject == -1) {
+				_currentObjectIndex = -1;
+				_currentActions = ActionType::kNone;
+				if (_currentAction != ActionType::kUse) {
 					_currentAction = ActionType::kNone;
-					_currentActionMousePointerIndex = static_cast<int>(CursorType::kCrosshair);
+				}
+				_currentActionMousePointerIndex = static_cast<int>(CursorType::kCrosshair);
+			} else if (_scriptEngine != nullptr && _queryActionScriptState != nullptr) {
+				bool resetAction = (hitObject != _currentObjectIndex);
+				_currentObjectIndex = hitObject;
+				_currentActions = _scriptEngine->getCurrentActions(_queryActionScriptState, _currentObjectIndex);
+
+				if (_currentAction != ActionType::kUse && resetAction) {
+					if (_currentActions != ActionType::kNone) {
+						_currentAction = ActionType::kLook;
+						while (((int)_currentActions & (int)_currentAction) == 0) {
+							_currentAction = static_cast<ActionType>((int)_currentAction << 1);
+						}
+						selectMouseAction();
+					} else {
+						_currentAction = ActionType::kNone;
+						_currentActionMousePointerIndex = static_cast<int>(CursorType::kCrosshair);
+					}
 				}
 			}
 		}
-	}
 
-	int actions = (int)_currentActions;
-	bool useYellow = true;
-	if (currentItemId >= 0) {
-		actions |= (int)ActionType::kUse;
-		useYellow = (_currentObjectIndex >= 0);
-	}
-	int action = (int)_currentAction;
-	int mask = (int)ActionType::kLook;
-
-	float space = (g_system->getWidth() - _actionText[6].getWidth() - 20.0f) / 6.0f;
-	for (int i = 0; i < 7; i++) {
-		if (mask == action && useYellow) {
-			_actionText[i].setColours(_currentActionColour1, _currentActionColour2, _currentActionColour3, _currentActionColour4);
-		} else if ((actions & mask) != 0) {
-			_actionText[i].setColours(_actionColour1, _actionColour2, _actionColour3, _actionColour4);
-		} else {
-			_actionText[i].setColours(_unavailableActionColour1, _unavailableActionColour2, _unavailableActionColour3, _unavailableActionColour4);
+		int actions = (int)_currentActions;
+		bool useYellow = true;
+		if (currentItemId >= 0) {
+			actions |= (int)ActionType::kUse;
+			useYellow = (_currentObjectIndex >= 0);
 		}
-		mask <<= 1;
+		int action = (int)_currentAction;
+		int mask = (int)ActionType::kLook;
 
-		if (g_engine && g_engine->_renderer) {
-			_actionText[i].render(g_engine->_renderer, space * i, 10.0f);
+		float space = (g_system->getWidth() - _actionText[6].getWidth() - 20.0f) / 6.0f;
+		for (int i = 0; i < 7; i++) {
+			if (mask == action && AnimationController::noAnimOrWave() && useYellow) {
+				_actionText[i].setColours(_currentActionColour1, _currentActionColour2, _currentActionColour3, _currentActionColour4);
+			} else if ((actions & mask) != 0) {
+				_actionText[i].setColours(_actionColour1, _actionColour2, _actionColour3, _actionColour4);
+			} else {
+				_actionText[i].setColours(_unavailableActionColour1, _unavailableActionColour2, _unavailableActionColour3, _unavailableActionColour4);
+			}
+			mask <<= 1;
+
+			if (g_engine && g_engine->_renderer) {
+				_actionText[i].render(g_engine->_renderer, space * i, 10.0f);
+			}
 		}
-	}
 
-	if (_currentAction == ActionType::kUse && currentItemId >= 0) {
-		ModuleController::_cursors[static_cast<int>(CursorType::kCrosshair)].render();
+		if (AnimationController::noAnimOrWave()) {
+			if (currentItemId >= 0) {
+				Item::renderItemImage(currentItemId, (float)(g_system->getWidth() - 98), (float)(g_system->getHeight() - 78), false);
+			}
+
+			if (_currentAction == ActionType::kUse && currentItemId >= 0) {
+				ModuleController::_cursors[static_cast<int>(CursorType::kCrosshair)].render();
+				Item::renderItemImage(currentItemId, (float)(g_system->getWidth() / 2), (float)(g_system->getHeight() / 2), false);
+			} else {
+				ModuleController::_cursors[_currentActionMousePointerIndex].render();
+			}
+		}
 	} else {
-		ModuleController::_cursors[_currentActionMousePointerIndex].render();
+		CursorMan.showMouse(false);
 	}
 }
 
@@ -346,12 +369,24 @@ void LocationModule::loadLocation(int locationFileIndex, uint8 *scriptData, int 
 }
 
 void LocationModule::pause() {
+	_movement_forward = 0.0f;
+	_movement_backward = 0.0f;
+	_movement_left = 0.0f;
+	_movement_right = 0.0f;
+	_movement_x = 0.0f;
+	_movement_y = 0.0f;
+	_movement_z = 0.0f;
+	_smooth_movement_x = 0.0f;
+	_smooth_movement_z = 0.0f;
+
 	g_system->lockMouse(false);
 }
 
 void LocationModule::resume() {
+	centerMouse();
 	g_system->lockMouse(true);
 	CursorMan.showMouse(true);
+	_ignoreNextMouseMove = true;
 
 	if (_scriptEngine != nullptr && _actionScriptState != nullptr &&
 		(_actionScriptState->_waitingForInput || _actionScriptState->_waitingForExternalModule)) {
@@ -372,6 +407,14 @@ void LocationModule::resize(int width, int height) {
 }
 
 void LocationModule::cursor(float x, float y, bool relative) {
+	if (!AnimationController::noAnimOrWave())
+		return;
+
+	if (_ignoreNextMouseMove) {
+		_ignoreNextMouseMove = false;
+		return;
+	}
+
 	float centerX = static_cast<float>(g_system->getWidth()) / 2.0f;
 	float centerY = static_cast<float>(g_system->getHeight()) / 2.0f;
 
@@ -386,18 +429,33 @@ void LocationModule::cursor(float x, float y, bool relative) {
 	float scale = 4.0f;
 	_location.deltaAngles((delta_y / 2000.0f) * scale, (delta_x / 2000.0f) * scale);
 
-	centerMouse();
+	if (!relative) {
+		centerMouse();
+	}
 }
 
 void LocationModule::beginAction() {
-	if (_currentAction != ActionType::kNone && _currentObjectIndex >= 0 && _scriptEngine != nullptr) {
-		int currentItemId = GameController::getCurrentItemId();
-		_scriptEngine->permformAction(_actionScriptState, _currentObjectIndex, _currentAction, _currentAction == ActionType::kUse ? currentItemId : -1);
+	if (!AnimationController::hasAnim()) {
+		if (_currentAction != ActionType::kNone) {
+			Caption::clearCaptions(pDisplayCaptions);
 
-		if (_currentAction != ActionType::kUse || GameController::getCurrentItemId() != currentItemId) {
-			cycleActions(false);
+			if (_currentObjectIndex >= 0 && _scriptEngine != nullptr) {
+				int currentItemId = GameController::getCurrentItemId();
+				_scriptEngine->permformAction(_actionScriptState, _currentObjectIndex, _currentAction, _currentAction == ActionType::kUse ? currentItemId : -1);
+
+				if (_currentAction != ActionType::kUse || GameController::getCurrentItemId() != currentItemId) {
+					cycleActions(false);
+				}
+				_location._pointingChanged = true;
+			}
 		}
-		_location._pointingChanged = true;
+	} else {
+		AnimationController::skip();
+		Caption::clearCaptions(pDisplayCaptions);
+
+		if (_actionScriptState != nullptr && _actionScriptState->_waitingForMediaToFinish && _scriptEngine != nullptr) {
+			_scriptEngine->resume(_actionScriptState, true);
+		}
 	}
 }
 
@@ -409,7 +467,14 @@ void LocationModule::back() {
 }
 
 void LocationModule::cycle() {
-	if (_currentActions != ActionType::kNone || GameController::getCurrentItemId() >= 0) {
+	if (AnimationController::hasAnim()) {
+		AnimationController::skip();
+		Caption::clearCaptions(pDisplayCaptions);
+
+		if (_actionScriptState != nullptr && _actionScriptState->_waitingForMediaToFinish && _scriptEngine != nullptr) {
+			_scriptEngine->resume(_actionScriptState, true);
+		}
+	} else if (_currentActions != ActionType::kNone || GameController::getCurrentItemId() >= 0) {
 		cycleActions(true);
 	}
 }
@@ -482,6 +547,10 @@ void LocationModule::mouseMove(Common::Point pt) {
 	cursor((float)pt.x, (float)pt.y, false);
 }
 
+void LocationModule::mouseMoveRel(Common::Point rel) {
+	cursor((float)rel.x, (float)rel.y, true);
+}
+
 void LocationModule::mouseDown(Common::Point pt, int btn) {
 	if (btn == 1) {
 		beginAction();
@@ -490,9 +559,23 @@ void LocationModule::mouseDown(Common::Point pt, int btn) {
 	}
 }
 
+void LocationModule::mouseWheel(int scroll) {
+	if (scroll > 0) {
+		next();
+	} else if (scroll < 0) {
+		prev();
+	}
+}
+
 void LocationModule::keyDown(uint32 key, uint32 lParam) {
 	if (key == Common::KEYCODE_ESCAPE) {
 		back();
+	} else if (key == Common::KEYCODE_SPACE) {
+		if (AnimationController::hasAnim()) {
+			cycle();
+		} else {
+			beginAction();
+		}
 	} else if (key == Common::KEYCODE_w || key == Common::KEYCODE_UP) {
 		moveForward(1.0f);
 	} else if (key == Common::KEYCODE_s || key == Common::KEYCODE_DOWN) {
@@ -501,6 +584,14 @@ void LocationModule::keyDown(uint32 key, uint32 lParam) {
 		moveLeft(1.0f);
 	} else if (key == Common::KEYCODE_d || key == Common::KEYCODE_RIGHT) {
 		moveRight(1.0f);
+	} else if (key == Common::KEYCODE_z || key == Common::KEYCODE_PAGEUP) {
+		moveUp(1.0f);
+	} else if (key == Common::KEYCODE_c || key == Common::KEYCODE_PAGEDOWN) {
+		moveDown(1.0f);
+	} else if (key == Common::KEYCODE_q) {
+		prev();
+	} else if (key == Common::KEYCODE_e) {
+		next();
 	} else if (key == Common::KEYCODE_LSHIFT || key == Common::KEYCODE_RSHIFT) {
 		run(true);
 	}
@@ -515,6 +606,9 @@ void LocationModule::keyUp(uint32 key, uint32 lParam) {
 		moveLeft(0.0f);
 	} else if (key == Common::KEYCODE_d || key == Common::KEYCODE_RIGHT) {
 		moveRight(0.0f);
+	} else if (key == Common::KEYCODE_z || key == Common::KEYCODE_PAGEUP ||
+			   key == Common::KEYCODE_c || key == Common::KEYCODE_PAGEDOWN) {
+		moveUp(0.0f);
 	} else if (key == Common::KEYCODE_LSHIFT || key == Common::KEYCODE_RSHIFT) {
 		run(false);
 	}

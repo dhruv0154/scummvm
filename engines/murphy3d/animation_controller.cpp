@@ -38,6 +38,18 @@ void AnimationController::clear() {
 	}
 }
 
+void AnimationController::destroy() {
+	if (_anim != nullptr) {
+		delete _anim;
+		_anim = nullptr;
+	}
+
+	if (_pCaption != nullptr) {
+		delete _pCaption;
+		_pCaption = nullptr;
+	}
+}
+
 bool AnimationController::load(const Common::String &fileName, int itemIndex) {
 	clear();
 
@@ -59,10 +71,6 @@ bool AnimationController::load(const Common::String &fileName, int itemIndex) {
 	delete stream;
 
 	_anim = load(data, len);
-	if (_anim == nullptr) {
-		delete[] data;
-	}
-
 	return (_anim != nullptr);
 }
 
@@ -117,7 +125,7 @@ bool AnimationController::updateAndRender(AnimBase *pAnim, bool render) {
 			pAnim->render();
 		}
 
-		if (!pAnim->isDone() && _pCaption != nullptr) {
+		if (!pAnim->isDone() && _pCaption != nullptr && g_engine && g_engine->_renderer) {
 			_pCaption->render(g_engine->_renderer, 0.0f, g_system->getHeight() - _pCaption->getHeight() - 10.0f, -1.0f);
 		}
 	}
@@ -152,6 +160,7 @@ AnimBase *AnimationController::load(uint8 *data, int length, int factor) {
 
 	if (data == nullptr || length < 8) {
 		warning("[AnimationController Error] Invalid or corrupt binary data passed to loader.");
+		delete[] data;
 		return nullptr;
 	}
 
@@ -173,6 +182,8 @@ AnimBase *AnimationController::load(uint8 *data, int length, int factor) {
 			delete pAnim;
 			pAnim = nullptr;
 		}
+	} else {
+		delete[] data;
 	}
 
 	return pAnim;
@@ -200,7 +211,7 @@ void AnimationController::setCaptionColours(int texColour1, int texColour2, int 
 }
 
 void AnimationController::renderCaptions(float z) {
-	if (_anim != nullptr && !_anim->isDone() && _pCaption != nullptr) {
+	if (_anim != nullptr && !_anim->isDone() && _pCaption != nullptr && g_engine && g_engine->_renderer) {
 		_pCaption->render(g_engine->_renderer, 0.0f, g_system->getHeight() - _pCaption->getHeight() - 10.0f, z);
 	}
 }

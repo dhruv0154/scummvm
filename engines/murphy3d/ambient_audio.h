@@ -24,6 +24,7 @@ public:
 	~AmbientAudio();
 
 	static void clear();
+	static void destroy();
 	static void loop(MapData *mapEntry, int entry1, int entry2);
 	static void play(MapData *mapEntry, int entry, bool playAlways);
 	static void stop(int entry);

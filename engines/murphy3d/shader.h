@@ -17,16 +17,21 @@ public:
 
 	OpenGL::Shader *getTexturedShader() const { return _texturedShader; }
 	OpenGL::Shader *getUIFontShader() const { return _uiFontShader; }
+	OpenGL::Shader *getColouredShader() const { return _colouredShader; }
 
 private:
 	OpenGL::Shader *_texturedShader;
 	OpenGL::Shader *_uiFontShader;
-		
+	OpenGL::Shader *_colouredShader;
+
 	const char *getVertexShaderTextured();
 	const char *getPixelShaderTextured();
 
 	const char *getVertexShaderUIFont();
 	const char *getPixelShaderUIFont();
+
+	const char *getVertexShaderColoured();
+	const char *getPixelShaderColoured();
 };
 
 } // End of namespace Murphy3d

@@ -1,7 +1,7 @@
 #include "murphy3d/uakm_game.h"
 #include "common/algorithm.h"
-#include "common/str.h"
 #include "common/compression/access_lzw.h"
+#include "common/str.h"
 #include "murphy3d/archive.h"
 #include "murphy3d/game_controller.h"
 #include "murphy3d/item.h"
@@ -29,6 +29,7 @@ UAKMGame::~UAKMGame() {
 
 bool UAKMGame::init() {
 	readGameXMLInfo("UAKM.xml");
+	Item::init();
 
 	// pass nullptr for dmap for now
 	UAKMMap *map = new UAKMMap();
@@ -37,6 +38,7 @@ bool UAKMGame::init() {
 		return true;
 	}
 
+	delete map;
 	return false;
 }
 
@@ -99,7 +101,7 @@ void UAKMGame::newGame() {
 	if (ModuleController::_pMap != nullptr) {
 		for (int i = 0; i < 64; i++) {
 			MapData *md = ModuleController::_pMap->get(i);
-			if (md && md->locationFileIndex == 63 && md->startupPositions.size() > 0) {
+			if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
 				startEntry = i;
 				break;
 			}
@@ -139,6 +141,12 @@ void UAKMGame::setWord(int offset, int value) {
 	if (offset >= 0 && offset < (UAKM_SAVE_SIZE - 1)) {
 		_gameData[offset] = value & 0xff;
 		_gameData[offset + 1] = (value >> 8) & 0xff;
+	}
+}
+
+void UAKMGame::copy(uint8 *source, int destinationOffset, int length) {
+	if (source && destinationOffset >= 0 && length > 0 && destinationOffset + length <= UAKM_SAVE_SIZE) {
+		memcpy(_gameData + destinationOffset, source, length);
 	}
 }
 
@@ -198,7 +206,7 @@ int UAKMGame::getItemId(int index) {
 }
 
 int UAKMGame::getItemState(int item) {
-	return _gameData[UAKM_SAVE_ITEM_STATES + item];
+	return (item >= 0 && item < UAKM_MAX_ITEM_COUNT) ? _gameData[UAKM_SAVE_ITEM_STATES + item] : 0;
 }
 
 void UAKMGame::setItemState(int item, int state) {
@@ -241,7 +249,7 @@ int UAKMGame::getCurrentItemId() {
 }
 
 void UAKMGame::setCurrentItemId(int item) {
-	_gameData[UAKM_SAVE_CURRENT_ITEM] = item;
+	_gameData[UAKM_SAVE_CURRENT_ITEM] = (item < 0) ? 0xff : (uint8)item;
 }
 
 int UAKMGame::selectNextItem() {
@@ -252,7 +260,7 @@ int UAKMGame::selectNextItem() {
 		newIndex = -1;
 	}
 	_gameData[UAKM_SAVE_CURRENT_ITEM] = newIndex < 0 ? 0xff : _gameData[UAKM_SAVE_INVENTORY + newIndex];
-	return _gameData[UAKM_SAVE_CURRENT_ITEM];
+	return getCurrentItemId();
 }
 
 int UAKMGame::selectPreviousItem() {
@@ -263,7 +271,7 @@ int UAKMGame::selectPreviousItem() {
 		newIndex = count - 1;
 	}
 	_gameData[UAKM_SAVE_CURRENT_ITEM] = newIndex < 0 ? 0xff : _gameData[UAKM_SAVE_INVENTORY + newIndex];
-	return _gameData[UAKM_SAVE_CURRENT_ITEM];
+	return getCurrentItemId();
 }
 
 int UAKMGame::indexOfItemId(int item) {
@@ -326,7 +334,7 @@ void UAKMGame::setTimer(int timer, int duration) {
 		_gameData[UAKM_SAVE_TIMERS + timer] = 1;
 		setWord(UAKM_SAVE_TIMERS_INITIAL + timer * 2, duration);
 		setWord(UAKM_SAVE_TIMERS_CURRENT + timer * 2, duration);
-		_timers[timer] = duration * TIMER_SCALE;
+		_timers[timer] = (int)(duration * TIMER_SCALE);
 	}
 }
 

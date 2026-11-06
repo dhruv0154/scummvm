@@ -14,6 +14,7 @@ namespace Murphy3d {
 class ModuleController {
 public:
 	static bool init(Map *map, Map *dmap);
+	static void destroy();
 
 	static void gotFocus();
 	static void lostFocus();
@@ -29,6 +30,7 @@ public:
 	static void render();
 
 	static void mouseMove(Common::Point pt);
+	static void mouseMoveRel(Common::Point rel);
 	static void mouseDown(Common::Point pt, int btn);
 	static void mouseUp(Common::Point pt, int btn);
 	static void mouseWheel(int scroll);

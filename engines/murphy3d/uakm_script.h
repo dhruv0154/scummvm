@@ -1,6 +1,7 @@
 #ifndef MURPHY3D_UAKM_SCRIPT_H
 #define MURPHY3D_UAKM_SCRIPT_H
 
+#include "math/vector3d.h"
 #include "murphy3d/script_base.h"
 
 namespace Murphy3d {
@@ -18,6 +19,8 @@ public:
 
 protected:
 	void (UAKMScript::*_functions[97])(ScriptState *pState);
+	VideoMode _videoMode;
+	Math::Vector3d _lastKnownEyeBotPosition;
 
 	void function_80(ScriptState *pState);
 	void function_81(ScriptState *pState);

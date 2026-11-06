@@ -28,6 +28,15 @@ void GameController::init() {
 	_canCancelTravel = false;
 }
 
+void GameController::destroy() {
+	_fileMap.clear();
+	_itemMap.clear();
+	_askAboutMap.clear();
+	_lSituations.clear();
+	_dSituations.clear();
+	_game = nullptr;
+}
+
 bool GameController::startGame(GameBase *pGame) {
 	_game = pGame;
 	if (_game != nullptr) {

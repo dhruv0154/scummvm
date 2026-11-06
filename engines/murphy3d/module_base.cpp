@@ -61,6 +61,9 @@ void ModuleBase::render() {
 void ModuleBase::mouseMove(Common::Point pt) {
 }
 
+void ModuleBase::mouseMoveRel(Common::Point rel) {
+}
+
 void ModuleBase::mouseDown(Common::Point pt, int btn) {
 }
 

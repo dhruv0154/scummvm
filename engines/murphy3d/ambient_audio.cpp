@@ -79,6 +79,21 @@ void AmbientAudio::clear() {
 	_sounds.clear();
 }
 
+void AmbientAudio::destroy() {
+	for (Common::HashMap<int, AmbientAudio *>::iterator it = _sounds.begin(); it != _sounds.end(); ++it) {
+		if (it->_value != nullptr) {
+			it->_value->stop();
+			delete it->_value;
+		}
+	}
+	_sounds.clear();
+
+	for (Common::List<AmbientAudio *>::iterator it = _soundsToDelete.begin(); it != _soundsToDelete.end(); ++it) {
+		delete *it;
+	}
+	_soundsToDelete.clear();
+}
+
 bool AmbientAudio::load(MapData *mapEntry, int entry) {
 	if (_sounds.contains(entry)) {
 		return true;

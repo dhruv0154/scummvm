@@ -26,6 +26,7 @@ bool Renderer::init() {
 		return false;
 
 	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -44,7 +45,7 @@ bool Renderer::init() {
 void Renderer::clear(float r, float g, float b) {
 	glViewport(0, 0, g_system->getWidth(), g_system->getHeight());
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
+	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_TRUE);
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
@@ -76,6 +77,7 @@ GLuint Renderer::createIndexBuffer(const void *data, uint32 size, bool dynamic) 
 
 void Renderer::updateBufferData(GLuint bufferId, const void *data, uint32 size, uint32 offset) {
 	glBindBuffer(GL_ARRAY_BUFFER, bufferId);
+	glBufferData(GL_ARRAY_BUFFER, offset + size, nullptr, GL_DYNAMIC_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, offset, size, data);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
@@ -107,6 +109,23 @@ void Renderer::drawTexturedTriangles(GLuint vbo, uint32 vertexCount, uint32 star
 	shader->use(true);
 
 	glDrawArrays(GL_TRIANGLES, startVertex, vertexCount);
+	shader->unbind();
+}
+
+void Renderer::drawColouredTriangles(GLuint vbo, uint32 vertexCount, uint32 startVertex) {
+	if (!_shaderManager || !vbo || vertexCount == 0)
+		return;
+
+	OpenGL::Shader *shader = _shaderManager->getColouredShader();
+	GLsizei stride = sizeof(COLOURED_VERTEX);
+
+	shader->enableVertexAttribute("position", vbo, 3, GL_FLOAT, GL_FALSE, stride, 0);
+	shader->enableVertexAttribute("color", vbo, 4, GL_FLOAT, GL_FALSE, stride, 3 * sizeof(float));
+	shader->use(true);
+
+	glDepthMask(GL_FALSE);
+	glDrawArrays(GL_TRIANGLES, startVertex, vertexCount);
+	glDepthMask(GL_TRUE);
 	shader->unbind();
 }
 

@@ -40,4 +40,9 @@ void Caption::swapCaptions() {
 	clearCaptions(pOld);
 }
 
+void Caption::destroy() {
+	clearCaptions(&captions1);
+	clearCaptions(&captions2);
+}
+
 } // End of namespace Murphy3d

@@ -4,7 +4,6 @@
 #include "murphy3d/murphy3d.h"
 #include "murphy3d/renderer.h"
 #include "murphy3d/shader_structs.h"
-#include <math.h>
 
 namespace Murphy3d {
 
