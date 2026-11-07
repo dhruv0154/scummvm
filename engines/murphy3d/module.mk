@@ -20,6 +20,23 @@ MODULE_OBJS = \
 	button.o \
 	label.o \
 	animated_cursor.o \
+	elevation.o \
+	ambient_audio.o \
+    anim_base.o \
+    animation_controller.o \
+    caption.o \
+    game_controller.o \
+	game_base.o \
+	hint.o \
+    location_module.o \
+	module_base.o \
+    module_controller.o \
+    sound.o \
+	script_base.o \
+	script_state.o \
+    uakm_game.o \
+    uakm_script.o \
+    wave.o
 	metaengine.o
 
 # This module can be built as a plugin
