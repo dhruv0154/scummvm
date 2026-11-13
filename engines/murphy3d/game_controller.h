@@ -89,11 +89,17 @@ public:
 	}
 
 	static void transformItem(int fromId, int toId);
+
 	static void setItemState(int item, int state) {
 		if (_game)
 			_game->setItemState(item, state);
+		_itemsChanged = true;
 	}
-	static int getItemState(int item) { return _game ? _game->getItemState(item) : 0; }
+
+	static int getItemState(int item) {
+		return _game ? _game->getItemState(item) : 0;
+	}
+
 	static void setItemState(int base, int item, int state) {
 		if (_game)
 			_game->setItemState(base, item, state);
@@ -113,10 +119,19 @@ public:
 			_game->setItemExamined(itemId, conditionalScore);
 	}
 
+	static void setSelectedItem(int item) {
+		if (_game)
+			_game->setSelectedItem(item);
+	}
+
+	static int getSelectedItem(int item = 0) { return _game ? _game->getSelectedItem(item) : 0; }
+
 	static void setAskAboutState(int index, uint8 state) {
+		_askAboutChanged = true;
 		if (_game)
 			_game->setAskAboutState(index, state);
 	}
+
 	static uint8 getAskAboutState(int index) { return _game ? _game->getAskAboutState(index) : 0; }
 	static int getAskAboutCount() { return _game ? _game->getAskAboutCount() : 0; }
 	static int getAskAboutId(int index) { return _game ? _game->getAskAboutId(index) : -1; }
@@ -154,8 +169,7 @@ public:
 	static int getHintCategoryCount() { return _game ? _game->getHintCategoryCount() : 0; }
 	static HintCategory *getHintCategory(int index) { return _game ? _game->getHintCategory(index) : nullptr; }
 
-	static HintModule *getHintModule() { return nullptr; }
-
+	static HintModule *getHintModule() { return _game ? _game->getHintModule() : nullptr; }
 
 	static GameBase *_game;
 

@@ -8,6 +8,7 @@
 #include "murphy3d/game_controller.h"
 #include "murphy3d/location_module.h"
 #include "murphy3d/module_controller.h"
+#include "murphy3d/video_module.h"
 
 namespace Murphy3d {
 
@@ -30,7 +31,7 @@ GameBase::~GameBase() {
 }
 
 void GameBase::loadFromDMap(int entry) {
-	// TODO: ModuleController::push(new VideoModule(VideoType::Scripted, entry));
+	ModuleController::push(new VideoModule(VideoType::kScripted, entry));
 }
 
 void GameBase::loadFromMap(int entry, int startupPosition) {
@@ -312,7 +313,9 @@ void GameBase::readGameXMLInfo(const Common::String &xmlFilename) {
 
 void GameBase::start() {
 	init();
-	// TODO: Push ResumeGameModule if "GAMES/SAVEGAME.000" exists, else VideoModule("TITLE.AP", 0)
+	if (Common::File::exists("TITLE.AP")) {
+		ModuleController::push(new VideoModule(VideoType::kSingle, "TITLE.AP", 0));
+	}
 }
 
 HintCategory *GameBase::getHintCategory(int index) {

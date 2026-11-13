@@ -3,6 +3,7 @@
 
 #include "murphy3d/anim_base.h"
 #include "murphy3d/text.h"
+#include "murphy3d/texture.h"
 
 namespace Murphy3d {
 
@@ -10,9 +11,11 @@ class AnimationController {
 public:
 	static void init();
 	static void clear();
+	static void clearImage();
 	static void destroy();
 
 	static bool load(const Common::String &fileName, int itemIndex);
+	static bool loadImage(const Common::String &fileName, int itemIndex);
 	static bool skip();
 	static bool isWave();
 	static bool hasAnim();
@@ -41,6 +44,8 @@ public:
 protected:
 	static AnimBase *_anim;
 	static Text *_pCaption;
+	static Texture *_bgTexture;
+	static GLuint _bgVbo;
 
 	static int _texCaptionColour1;
 	static int _texCaptionColour2;

@@ -16,6 +16,7 @@ public:
 
 	float getPixelWidth(char ch) const;
 	float getPixelWidth(const Common::String &text) const;
+	void getSize(const Common::String &text, float maxw, float &outWidth, float &outHeight, float scale = 1.0f) const;
 
 	Texture *getTexture() const { return _texture; }
 	float getHeight() const { return _height; }

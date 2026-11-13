@@ -17,9 +17,10 @@ public:
 	void permformAction(ScriptState *pState, int id, ActionType action, int item) override;
 	void selectDialogueOption(ScriptState *pState, int option) override;
 
+	static VideoMode _videoMode;
+
 protected:
 	void (UAKMScript::*_functions[97])(ScriptState *pState);
-	VideoMode _videoMode;
 	Math::Vector3d _lastKnownEyeBotPosition;
 
 	void function_80(ScriptState *pState);
@@ -123,6 +124,7 @@ protected:
 	void addCaption(ScriptState *pState, bool texTalk);
 	void play(ScriptState *pState, int index, int bank, int rate);
 	void playAudio(ScriptState *pState, int index);
+	void show(ScriptState *pState, int index);
 };
 
 } // End of namespace Murphy3d

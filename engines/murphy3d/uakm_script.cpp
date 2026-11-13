@@ -8,10 +8,13 @@
 #include "murphy3d/animation_controller.h"
 #include "murphy3d/ambient_audio.h"
 #include "murphy3d/main_menu.h"
+#include "murphy3d/video_module.h"
 
 namespace Murphy3d {
 
-UAKMScript::UAKMScript() : _videoMode(VideoMode::kFullScreen), _lastKnownEyeBotPosition(0.0f, 0.0f, 0.0f) {
+VideoMode UAKMScript::_videoMode = VideoMode::kFullScreen;
+
+UAKMScript::UAKMScript() : _lastKnownEyeBotPosition(0.0f, 0.0f, 0.0f) {
 	_functions[0x00] = &UAKMScript::function_80;
 	_functions[0x01] = &UAKMScript::function_81;
 	_functions[0x02] = &UAKMScript::function_82;
@@ -191,8 +194,21 @@ void UAKMScript::selectDialogueOption(ScriptState *pState, int option) {
 	if (pState == nullptr)
 		return;
 
-	pState->_selectedOption = option;
-	resume(pState, true);
+	if (pState->_mode == InteractionMode::kOffer && option == 1) {
+		pState->_offer = !pState->_offer;
+		pState->_topItemOffset = -1;
+	} else if (GameController::getParameter(253) == 1 && option == 1) {
+		pState->_askAbout = !pState->_askAbout;
+		pState->_topItemOffset = -1;
+	} else {
+		pState->_askAbout = false;
+		pState->_offer = false;
+		if (pState->_waitingForInput) {
+			pState->_mode = InteractionMode::kNone;
+			pState->_selectedOption = option;
+			resume(pState, true);
+		}
+	}
 }
 
 void UAKMScript::addCaption(ScriptState *pState, bool texTalk) {
@@ -237,6 +253,19 @@ void UAKMScript::play(ScriptState *pState, int index, int bank, int rate) {
 void UAKMScript::playAudio(ScriptState *pState, int index) {
 	(void)pState;
 	AmbientAudio::play(_mapEntry, index, true);
+}
+
+void UAKMScript::show(ScriptState *pState, int index) {
+	(void)pState;
+	if (_mapEntry != nullptr && (_mapEntry->scriptFileEntry != 0 || _mapEntry->scriptFileIndex != 0)) {
+		if (index >= 0 && index < (int)_mapEntry->imageMap.size()) {
+			const FileMap &fm = _mapEntry->imageMap[index];
+			Common::String fn = GameController::getFileName(fm.file);
+			if (!fn.empty()) {
+				AnimationController::loadImage(fn, fm.entry);
+			}
+		}
+	}
 }
 
 // 0x80: End of script block
@@ -386,12 +415,10 @@ void UAKMScript::function_90(ScriptState *pState) {
 
 // 0x91: Conditional jump if ItemState(bix) == cmp
 void UAKMScript::function_91(ScriptState *pState) {
-	int bix = pState->read16();
-	int cmp = pState->read8();
-	int ns = pState->read16();
-	if (GameController::getItemState(bix) == cmp) {
-		pState->_executionPointer = pState->getScript(ns);
-	}
+	int bix = READ_LE_INT16(pState->_script + pState->_executionPointer);
+	uint8_t cmp = pState->_script[pState->_executionPointer + 2];
+	int ns = READ_LE_INT16(pState->_script + pState->_executionPointer + 4);
+	pState->_executionPointer = (GameController::getItemState(bix) == cmp) ? pState->getScript(ns) : pState->_executionPointer + 6;
 }
 
 // 0x92: End script
@@ -420,30 +447,19 @@ void UAKMScript::function_94(ScriptState *pState) {
 	GameController::setWord(UAKM_SAVE_DMAP_ENTRY, dmapEntry);
 	GameController::setData(UAKM_SAVE_DMAP_FLAG, 1);
 	GameController::setData(UAKM_SAVE_SCRIPT_ID, (uint8)0);
-	debug(0, "UAKMScript::function_94: loadFromDMap(%d) stubbed (VideoModule not yet ported)", dmapEntry);
+	debug(0, "UAKMScript::function_94: loadFromDMap(%d)", dmapEntry);
 	GameController::loadFromDMap(dmapEntry);
-	// not setting _waitingForInput while VideoModule is a stub so LocationModule does not lock
-	pState->_executionPointer = -1;
+	pState->_waitingForInput = true;
 }
 
 // 0x95: conditional jump if animation frame == frame
 void UAKMScript::function_95(ScriptState *pState) {
-	int anim = pState->read8();
-	pState->read8(); // padding byte
-	int frame = pState->read8();
-	int ns = pState->read16();
-	if (_pLoc != nullptr && _pLoc->getAnimationFrame(anim) == frame) {
-		pState->_executionPointer = pState->getScript(ns);
-	}
+	pState->_executionPointer = (_pLoc != nullptr && _pLoc->getAnimationFrame(pState->_script[pState->_executionPointer]) == pState->_script[pState->_executionPointer + 2] ? pState->getScript(READ_LE_INT16(pState->_script + pState->_executionPointer + 4)) : pState->_executionPointer + 6);
 }
 
 // 0x96: Conditional jump if animation is finished
 void UAKMScript::function_96(ScriptState *pState) {
-	int anim = pState->read8();
-	int ns = pState->read16();
-	if (_pLoc != nullptr && _pLoc->isAnimationFinished(anim)) {
-		pState->_executionPointer = pState->getScript(ns);
-	}
+	pState->_executionPointer = (_pLoc != NULL && _pLoc->isAnimationFinished(pState->_script[pState->_executionPointer])) ? pState->getScript(READ_LE_INT16(pState->_script + pState->_executionPointer + 2)) : pState->_executionPointer + 4;
 }
 
 // 0x97: Play audio clip
@@ -470,18 +486,40 @@ void UAKMScript::function_99(ScriptState *pState) {
 
 // 0x9A: Conditional jump if Player (X, Z) is inside 2D box
 void UAKMScript::function_9A(ScriptState *pState) {
-	float x1 = pState->read12_4();
-	float x2 = pState->read12_4();
-	float z1 = pState->read12_4();
-	float z2 = pState->read12_4();
-	int ns = pState->read16();
+	int p1 = READ_LE_INT16(pState->_script + pState->_executionPointer);
+	int p2 = READ_LE_INT16(pState->_script + pState->_executionPointer + 2);
+	int p3 = READ_LE_INT16(pState->_script + pState->_executionPointer + 4);
+	int p4 = READ_LE_INT16(pState->_script + pState->_executionPointer + 6);
+	int script = READ_LE_INT16(pState->_script + pState->_executionPointer + 8);
+
+	if ((p1 & 0x8000) != 0)
+		p1 = (int)(p1 | 0xffff0000);
+	if ((p2 & 0x8000) != 0)
+		p2 = (int)(p2 | 0xffff0000);
+	if ((p3 & 0x8000) != 0)
+		p3 = (int)(p3 | 0xffff0000);
+	if ((p4 & 0x8000) != 0)
+		p4 = (int)(p4 | 0xffff0000);
+
+	float f1 = ((float)p1) / 16.0f;
+	float f2 = ((float)p2) / 16.0f;
+	float f3 = ((float)p3) / 16.0f;
+	float f4 = ((float)p4) / 16.0f;
+
+	float x1 = MIN(f1, f3);
+	float x2 = MAX(f1, f3);
+	float z1 = MIN(f2, f4);
+	float z2 = MAX(f2, f4);
+
 	if (_pLoc != nullptr) {
-		Math::Vector3d pos = _pLoc->getPlayerPosition();
-		float minX = MIN(x1, x2), maxX = MAX(x1, x2);
-		float minZ = MIN(z1, z2), maxZ = MAX(z1, z2);
-		if (pos.x() >= minX && pos.x() <= maxX && pos.z() >= minZ && pos.z() <= maxZ) {
-			pState->_executionPointer = pState->getScript(ns);
+		Math::Vector3d p = _pLoc->getPlayerPosition();
+		if (p.x() >= x1 && p.x() <= x2 && p.z() >= z1 && p.z() <= z2) {
+			pState->_executionPointer = pState->getScript(script);
+		} else {
+			pState->_executionPointer += 10;
 		}
+	} else {
+		pState->_executionPointer += 10;
 	}
 }
 
@@ -579,7 +617,7 @@ void UAKMScript::function_AA(ScriptState *pState) {
 // 0xAB: Show Picture (1 byte)
 void UAKMScript::function_AB(ScriptState *pState) {
 	int ix = pState->read8();
-	debug(0, "UAKMScript::function_AB: Show Picture %d stubbed (PictureModule not yet ported)", ix);
+	show(pState, ix);
 }
 
 // 0xAC: disable travel cancel
@@ -673,10 +711,19 @@ void UAKMScript::function_B3(ScriptState *pState) { pState->_executionPointer = 
 // 0xB4: Display 3 dialogue option strings
 void UAKMScript::function_B4(ScriptState *pState) {
 	pState->_lastDialoguePoint = pState->_executionPointer - 1;
+
+	const char *pT[3] = {"", "", ""};
 	for (int i = 0; i < 3; i++) {
+		if (pState->_executionPointer < pState->_length) {
+			pT[i] = (const char *)(pState->_script + pState->_executionPointer);
+		}
 		while (pState->_executionPointer < pState->_length && pState->_script[pState->_executionPointer++] != 0) {
 		}
 	}
+
+	int count = (strlen(pT[2]) == 0) ? ((strlen(pT[1]) == 0) ? 1 : 2) : 3;
+	VideoModule::setDialogueOptions(count, pT[0], 1, pT[1], 2, pT[2], 3);
+
 	pState->_selectedOption = -1;
 	pState->_waitingForInput = true;
 }
@@ -802,14 +849,26 @@ void UAKMScript::function_C9(ScriptState *pState) {
 void UAKMScript::function_CA(ScriptState *pState) {
 	int ix = pState->read8();
 	uint8 state = (uint8)pState->read8();
-	GameController::setHintCategoryState(ix, state);
+	if (GameController::getHintCategoryState(ix) != 2) {
+		GameController::setHintCategoryState(ix, state);
+	}
 }
 
 void UAKMScript::function_CB(ScriptState *pState) {}
 
 // 0xCC: Set HintState (2 bytes)
 void UAKMScript::function_CC(ScriptState *pState) {
-	pState->read16();
+	int val = pState->read16();
+	if (val >= 1000) {
+		val -= 1000;
+		GameController::setHintState(val, 1, 0);
+	} else {
+		int currentState = GameController::getHintState(val);
+		GameController::setHintState(val, currentState | 1, 0);
+		if (currentState == 0) {
+			GameController::addScore(1);
+		}
+	}
 }
 
 // 0xCD: Set FrameTrigger (2 bytes)
@@ -861,9 +920,9 @@ void UAKMScript::function_D9(ScriptState *pState) {}
 void UAKMScript::function_DA(ScriptState *pState) {
 	float x = pState->read12_4();
 	float z = pState->read12_4();
-	float distSq = pState->read12_4();
+	float dist = pState->read12_4();
 	int ns = pState->read16();
-	if (_pLoc != nullptr && _pLoc->getPlayerDistanceFromPoint(x, z) <= distSq) {
+	if (_pLoc != nullptr && _pLoc->getPlayerDistanceFromPoint(x, z) <= (dist * dist)) {
 		pState->_executionPointer = pState->getScript(ns);
 	}
 }

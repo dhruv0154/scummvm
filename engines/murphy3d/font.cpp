@@ -1,4 +1,5 @@
 #include "murphy3d/font.h"
+#include "common/array.h"
 #include "common/debug.h"
 #include "common/file.h"
 #include "graphics/surface.h"
@@ -98,6 +99,58 @@ float Font::getPixelWidth(const Common::String &text) const {
 		pixels += getPixelWidth(text[i]);
 	}
 	return pixels;
+}
+
+void Font::getSize(const Common::String &text, float maxw, float &outWidth, float &outHeight, float scale) const {
+	Common::Array<float> wordWidths;
+	float pixels = 0.0f;
+	float maxWordWidth = 0.0f;
+
+	for (uint i = 0; i <= text.size(); i++) {
+		char c = (i == text.size()) ? 0 : text[i];
+		if (c == 0 || c == 0x20) {
+			if (pixels > 0.0f) {
+				wordWidths.push_back(pixels);
+				if (pixels > maxWordWidth)
+					maxWordWidth = pixels;
+			}
+			pixels = 0.0f;
+		} else if ((unsigned char)c > 0x20 && (unsigned char)c <= 0x7f) {
+			pixels += _widths[(unsigned char)c - 0x20] * scale;
+		}
+	}
+
+	if (maxWordWidth > maxw) {
+		maxw = maxWordWidth;
+	}
+
+	int lines = 0;
+	float maxLineWidth = 0.0f;
+	float spaceWidth = _widths[0] * scale;
+	uint idx = 0;
+
+	while (idx < wordWidths.size()) {
+		float linePixels = wordWidths[idx++];
+		float pixelsLeft = maxw - linePixels;
+		lines++;
+
+		while (idx < wordWidths.size() && pixelsLeft >= (wordWidths[idx] + spaceWidth)) {
+			float pix = wordWidths[idx++] + spaceWidth;
+			linePixels += pix;
+			pixelsLeft -= pix;
+		}
+
+		if (linePixels > maxLineWidth) {
+			maxLineWidth = linePixels;
+		}
+	}
+
+	if (maxLineWidth < maxw) {
+		maxw = maxLineWidth;
+	}
+
+	outWidth = maxw;
+	outHeight = (float)lines * _height * scale;
 }
 
 } // End of namespace Murphy3d

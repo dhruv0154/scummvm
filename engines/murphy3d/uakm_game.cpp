@@ -1,13 +1,17 @@
 #include "murphy3d/uakm_game.h"
 #include "common/algorithm.h"
 #include "common/compression/access_lzw.h"
+#include "common/file.h"
 #include "common/str.h"
+#include "common/textconsole.h"
 #include "murphy3d/archive.h"
 #include "murphy3d/game_controller.h"
 #include "murphy3d/item.h"
 #include "murphy3d/main_menu.h"
 #include "murphy3d/module_controller.h"
+#include "murphy3d/uakm_dmap.h"
 #include "murphy3d/uakm_map.h"
+#include "murphy3d/video_module.h"
 
 namespace Murphy3d {
 
@@ -31,14 +35,15 @@ bool UAKMGame::init() {
 	readGameXMLInfo("UAKM.xml");
 	Item::init();
 
-	// pass nullptr for dmap for now
 	UAKMMap *map = new UAKMMap();
-	if (ModuleController::init(map, nullptr) && loadIcons()) {
+	UAKMDMap *dmap = new UAKMDMap();
+	if (ModuleController::init(map, dmap) && loadIcons()) {
 		ModuleController::push(new MainMenu());
 		return true;
 	}
 
 	delete map;
+	delete dmap;
 	return false;
 }
 
@@ -91,24 +96,40 @@ void UAKMGame::newGame() {
 	_gameData[UAKM_SAVE_PARAMETERS + 250] = 1;
 	_gameData[UAKM_SAVE_HINT_CATEGORY_STATES + 1] = 1;
 
+	Archive gfxArch;
+	if (gfxArch.open("GRAPHICS.AP")) {
+		Common::SeekableReadStream *s = gfxArch.getStream(23);
+		if (s != nullptr) {
+			if (s->size() == 0x1fe) {
+				s->read(_gameData + UAKM_SAVE_PUZZLE_DATA, 0x1fe);
+			}
+			delete s;
+		}
+	}
+
 	MainMenu *mainMenu = static_cast<MainMenu *>(ModuleController::get(ModuleType::kMainMenu));
 	if (mainMenu != nullptr) {
 		mainMenu->enableResume(true);
 		mainMenu->enableSave(true);
 	}
 
-	int startEntry = 0;
-	if (ModuleController::_pMap != nullptr) {
-		for (int i = 0; i < 64; i++) {
-			MapData *md = ModuleController::_pMap->get(i);
+	if (ModuleController::_pDMap != nullptr && ModuleController::_pDMap->get(0) != nullptr &&
+		(ModuleController::_pDMap->get(0)->scriptFileIndex != 0 || ModuleController::_pDMap->get(0)->scriptFileEntry != 0)) {
+		loadFromDMap(0);
+	} else {
+		int startEntry = 0;
+		if (ModuleController::_pMap != nullptr) {
+			for (int i = 0; i < 64; i++) {
+				MapData *md = ModuleController::_pMap->get(i);
 			if (md && md->locationFileIndex == 48 && md->startupPositions.size() > 0) {
-				startEntry = i;
-				break;
+					startEntry = i;
+					break;
+				}
 			}
 		}
-	}
 
-	loadFromMap(startEntry, 0);
+		loadFromMap(startEntry, 0);
+	}
 }
 
 void UAKMGame::loadGame(const char *fileName) {

@@ -18,7 +18,7 @@ bool ModuleController::init(Map *map, Map *dmap) {
 	if (map != nullptr) {
 		_pMap = map;
 		_pDMap = dmap;
-		bool ret = (map->init());
+		bool ret = map->init() && (dmap == nullptr || dmap->init());
 		return ret;
 	}
 
@@ -42,7 +42,9 @@ void ModuleController::pop(ModuleBase *pModule) {
 		_modules.remove(pModule);
 
 		if (_currentModule == pModule) {
-			if (!_modules.empty()) {
+			if (_nextModule != nullptr) {
+				_currentModule = nullptr;
+			} else if (!_modules.empty()) {
 				_currentModule = _modules.front();
 				resumeModule(_currentModule);
 			} else {
@@ -126,7 +128,9 @@ void ModuleController::render() {
 	if (_currentModule != nullptr) {
 		g_engine->_renderer->clear(0, 0, 0);
 		_currentModule->render();
-		_currentModule->checkInput();
+		if (_currentModule != nullptr) {
+			_currentModule->checkInput();
+		}
 	}
 }
 
