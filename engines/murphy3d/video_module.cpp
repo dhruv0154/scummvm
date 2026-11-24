@@ -429,10 +429,6 @@ void VideoModule::mouseMove(Common::Point pt) {
 	cursor((float)pt.x, (float)pt.y, false);
 }
 
-void VideoModule::mouseMoveRel(Common::Point rel) {
-	cursor((float)rel.x, (float)rel.y, true);
-}
-
 void VideoModule::mouseDown(Common::Point pt, int btn) {
 	cursor((float)pt.x, (float)pt.y, false);
 	if (btn == 1 || btn == 2) {

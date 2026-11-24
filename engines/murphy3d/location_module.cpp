@@ -73,9 +73,6 @@ LocationModule::LocationModule(int locationId, int startupPosition)
 }
 
 LocationModule::~LocationModule() {
-	if (g_system) {
-		g_system->lockMouse(false);
-	}
 	if (_actionScriptState != nullptr && _actionScriptState->_script != nullptr) {
 		delete[] _actionScriptState->_script;
 		_actionScriptState->_script = nullptr;
@@ -97,8 +94,6 @@ LocationModule::~LocationModule() {
 }
 
 void LocationModule::initialize() {
-	centerMouse();
-	g_system->lockMouse(true);
 	CursorMan.showMouse(true);
 	_ignoreNextMouseMove = true;
 
@@ -187,6 +182,7 @@ void LocationModule::render() {
 
 	if (!AnimationController::hasAnim()) {
 		CursorMan.showMouse(true);
+		centerMouse();
 
 		float mx = _movement_x;
 		float mz = _movement_z;
@@ -407,7 +403,7 @@ void LocationModule::resize(int width, int height) {
 }
 
 void LocationModule::cursor(float x, float y, bool relative) {
-	if (!AnimationController::noAnimOrWave())
+	if (!relative || !AnimationController::noAnimOrWave())
 		return;
 
 	if (_ignoreNextMouseMove) {
@@ -415,23 +411,8 @@ void LocationModule::cursor(float x, float y, bool relative) {
 		return;
 	}
 
-	float centerX = static_cast<float>(g_system->getWidth()) / 2.0f;
-	float centerY = static_cast<float>(g_system->getHeight()) / 2.0f;
-
-	float delta_x = relative ? x : (x - centerX);
-	float delta_y = relative ? y : (y - centerY);
-
-	// if this EVENT_MOUSEMOVE was just centerMouse() warping to (320, 240), ignore it
-	if (delta_x == 0.0f && delta_y == 0.0f) {
-		return;
-	}
-
 	float scale = 4.0f;
-	_location.deltaAngles((delta_y / 2000.0f) * scale, (delta_x / 2000.0f) * scale);
-
-	if (!relative) {
-		centerMouse();
-	}
+	_location.deltaAngles((y / 2000.0f) * scale, (x / 2000.0f) * scale);
 }
 
 void LocationModule::beginAction() {
@@ -541,10 +522,6 @@ void LocationModule::cycleItems(int direction) {
 
 void LocationModule::hints() {
 	//ModuleController::push(GameController::getHintModule());
-}
-
-void LocationModule::mouseMove(Common::Point pt) {
-	cursor((float)pt.x, (float)pt.y, false);
 }
 
 void LocationModule::mouseMoveRel(Common::Point rel) {

@@ -146,6 +146,7 @@ Common::Error Murphy3dEngine::run() {
 
 			case Common::EVENT_MOUSEMOVE:
 				ModuleController::mouseMove(e.mouse);
+				ModuleController::mouseMoveRel(e.relMouse);
 				break;
 
 			case Common::EVENT_LBUTTONDOWN:

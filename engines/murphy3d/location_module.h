@@ -41,7 +41,6 @@ public:
 
 	void keyDown(uint32 key, uint32 lParam) override;
 	void keyUp(uint32 key, uint32 lParam) override;
-	void mouseMove(Common::Point pt) override;
 	void mouseMoveRel(Common::Point rel) override;
 	void mouseDown(Common::Point pt, int btn) override;
 	void mouseWheel(int scroll) override;

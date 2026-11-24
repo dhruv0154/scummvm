@@ -123,6 +123,10 @@ void ModuleController::render() {
 
 		_currentModule = _nextModule;
 		_nextModule = nullptr;
+
+		if (g_system && _currentModule != nullptr) {
+			g_system->lockMouse(_currentModule->_type == ModuleType::kLocation);
+		}
 	}
 
 	if (_currentModule != nullptr) {

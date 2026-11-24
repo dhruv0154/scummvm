@@ -170,7 +170,8 @@ void GameBase::readGameXMLInfo(const Common::String &xmlFilename) {
 				Common::String tag = section.substr(pos, tagEnd - pos);
 				Common::String val = getAttr(tag, "Name");
 				if (!val.empty())
-					GameController::setFileName(ix++, val);
+					GameController::setFileName(ix, val);
+				ix++;
 				pos = tagEnd;
 			}
 		}
@@ -239,7 +240,8 @@ void GameBase::readGameXMLInfo(const Common::String &xmlFilename) {
 					Common::String tag = lSec.substr(pos, tagEnd - pos);
 					Common::String val = getAttr(tag, "Name");
 					if (!val.empty())
-						GameController::setSituationDescriptionL(ix++, val);
+						GameController::setSituationDescriptionL(ix, val);
+					ix++;
 					pos = tagEnd;
 				}
 			}
@@ -261,7 +263,8 @@ void GameBase::readGameXMLInfo(const Common::String &xmlFilename) {
 					Common::String tag = dSec.substr(pos, tagEnd - pos);
 					Common::String val = getAttr(tag, "Name");
 					if (!val.empty())
-						GameController::setSituationDescriptionD(ix++, val);
+						GameController::setSituationDescriptionD(ix, val);
+					ix++;
 					pos = tagEnd;
 				}
 			}

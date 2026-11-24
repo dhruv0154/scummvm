@@ -100,7 +100,6 @@ public:
 
 	void resize(int width, int height) override;
 	void mouseMove(Common::Point pt) override;
-	void mouseMoveRel(Common::Point rel) override;
 	void mouseDown(Common::Point pt, int btn) override;
 	void mouseWheel(int scroll) override;
 	void keyDown(uint32 key, uint32 lParam) override;
