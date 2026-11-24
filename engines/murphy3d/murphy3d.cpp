@@ -49,6 +49,7 @@
 #include "murphy3d/animation_controller.h"
 #include "murphy3d/ambient_audio.h"
 #include "murphy3d/caption.h"
+#include "murphy3d/video_module.h"
 
 namespace Murphy3d {
 
@@ -67,7 +68,7 @@ Murphy3dEngine::~Murphy3dEngine() {
 	ModuleController::destroy();
 	Item::dispose();
 	Button::disposeTextures();
-
+	VideoModule::disposeResources();
 	delete _game;
 	GameController::destroy();
 
@@ -80,6 +81,12 @@ void Murphy3dEngine::resumeGame() {
 	if (mainMenu != nullptr) {
 		ModuleController::sendToBack(mainMenu);
 	}
+}
+
+void Murphy3dEngine::quitGame() {
+	Common::Event ev;
+	ev.type = Common::EVENT_QUIT;
+	g_system->getEventManager()->pushEvent(ev);
 }
 
 void Murphy3dEngine::showMainMenu() {
@@ -140,10 +147,6 @@ Common::Error Murphy3dEngine::run() {
 	while (!shouldQuit()) {
 		while (g_system->getEventManager()->pollEvent(e)) {
 			switch (e.type) {
-			case Common::EVENT_QUIT:
-			case Common::EVENT_RETURN_TO_LAUNCHER:
-				return Common::kNoError;
-
 			case Common::EVENT_MOUSEMOVE:
 				ModuleController::mouseMove(e.mouse);
 				ModuleController::mouseMoveRel(e.relMouse);

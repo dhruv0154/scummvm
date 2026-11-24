@@ -62,9 +62,7 @@ public:
 
 	void resumeGame();
 	void showMainMenu();
-	void quitGame() {
-		Engine::quitGame();
-	}
+	void quitGame();
 
 public:
 	Murphy3dEngine(OSystem *syst, const ADGameDescription *gameDesc);
