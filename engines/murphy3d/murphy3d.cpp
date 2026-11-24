@@ -143,6 +143,7 @@ Common::Error Murphy3dEngine::run() {
 
 	Common::Event e;
 	Graphics::FrameLimiter limiter(g_system, 60);
+	uint32 lastTime = g_system->getMillis();
 
 	while (!shouldQuit()) {
 		while (g_system->getEventManager()->pollEvent(e)) {
@@ -188,6 +189,13 @@ Common::Error Murphy3dEngine::run() {
 				break;
 			}
 		}
+
+		uint32 now = g_system->getMillis();
+		uint32 deltaTime = now - lastTime;
+		lastTime = now;
+
+		GameController::tick(deltaTime);
+		AmbientAudio::gc();
 
 		ModuleController::render();
 
